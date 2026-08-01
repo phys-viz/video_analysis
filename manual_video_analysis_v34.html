@@ -1,0 +1,2816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Manual Video Analysis</title>
+<style>
+  :root{
+    /* Surfaces */
+    --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --line:#334155;
+    --well:#0b1220; --stage:#020617;
+    /* Type */
+    --text:#e5e7eb; --muted:#94a3b8;
+    /* Accents */
+    --accent:#38bdf8; --accent2:#f59e0b; --good:#22c55e; --danger:#ef4444;
+    --xcolor:#38bdf8; --ycolor:#22c55e; --calcolor:#c084fc;
+    /* Graph canvas */
+    --graph-bg:#f8fafc;
+    /* Geometry */
+    --r-lg:12px; --r-md:8px; --r-sm:6px;
+  }
+
+  /* ---------- base ---------- */
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+  button,input,select{font:inherit}
+  button{
+    background:var(--panel2);
+    color:var(--text);
+    border:1px solid var(--line);
+    border-radius:var(--r-md);
+    padding:8px 11px;
+    cursor:pointer;
+    transition:background .14s ease,border-color .14s ease;
+  }
+  button:hover{border-color:#64748b;background:#263244}
+  button:active{transform:translateY(1px)}
+  button.active{background:#0c4a6e;border-color:var(--accent)}
+  button.danger{border-color:#7f1d1d}
+  button.danger:hover{border-color:#b91c1c;background:#2a1616}
+  input,select{
+    background:var(--well);
+    color:var(--text);
+    border:1px solid var(--line);
+    border-radius:var(--r-sm);
+    padding:7px;
+    transition:border-color .14s ease;
+  }
+  input:hover,select:hover{border-color:#64748b}
+  input[type=number]{width:88px}
+  input.invalid{outline:2px solid #dc2626;background:#fef2f2}
+  label{font-size:13px;color:var(--muted)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .hidden{display:none!important}
+  .spacer{flex:1}
+
+  /* Range slider, styled to match the rest of the controls. */
+  input[type=range]{
+    width:100%;
+    height:20px;
+    margin:0;
+    background:transparent;
+    -webkit-appearance:none;
+    appearance:none;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:6px;border-radius:99px;background:#1e293b;border:1px solid var(--line);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;
+    width:15px;height:15px;margin-top:-6px;
+    border-radius:50%;background:var(--accent);
+    border:2px solid var(--well);cursor:pointer;
+  }
+  input[type=range]::-moz-range-track{
+    height:6px;border-radius:99px;background:#1e293b;border:1px solid var(--line);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:13px;height:13px;border-radius:50%;
+    background:var(--accent);border:2px solid var(--well);cursor:pointer;
+  }
+
+  /* ---------- shell ---------- */
+  /* minmax(0,1fr) lets the row shrink; a plain 1fr has an auto minimum and
+     would still be pushed taller by a long data table. */
+  .app{display:grid;grid-template-rows:auto minmax(0,1fr);height:100vh}
+  .toolbar{
+    display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+    padding:10px;border-bottom:1px solid var(--line);background:var(--well);
+  }
+  .main{
+    display:grid;
+    grid-template-columns:minmax(520px,var(--left-pane,64%)) 10px minmax(360px,1fr);
+    gap:0;padding:10px;min-height:0;align-items:stretch;
+  }
+
+  .splitter{position:relative;cursor:col-resize;touch-action:none;user-select:none;background:transparent}
+  .splitter::before{
+    content:"";position:absolute;inset:0 3px;
+    border-left:1px solid #475569;border-right:1px solid #475569;
+    background:var(--well);border-radius:var(--r-md);
+    transition:background .15s,border-color .15s;
+  }
+  .splitter::after{
+    content:"↔";position:absolute;left:50%;top:50%;
+    transform:translate(-50%,-50%);
+    color:var(--text);font-size:18px;font-weight:700;text-shadow:0 1px 2px #000;
+  }
+  .splitter:hover::before,.splitter.dragging::before{background:#0c4a6e;border-color:var(--accent)}
+
+  /* ---------- video panel ---------- */
+  .video-panel{
+    display:flex;flex-direction:column;
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--r-lg) var(--r-md) var(--r-md) var(--r-lg);
+    overflow:hidden;
+  }
+  .video-panel{min-height:0}
+  .video-wrap{
+    position:relative;background:var(--stage);
+    display:grid;place-items:center;
+    flex:1 1 auto;min-height:430px;overflow:hidden;
+  }
+  video{display:block;max-width:100%;max-height:68vh}
+  canvas.overlay{
+    position:absolute;inset:0;width:100%;height:100%;
+    touch-action:none;pointer-events:auto;z-index:2;
+  }
+  .hud{
+    z-index:3;position:absolute;left:10px;top:10px;
+    background:rgba(2,6,23,.7);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(148,163,184,.3);
+    border-radius:9px;padding:7px 10px;
+    font-size:12.5px;line-height:1.5;
+    font-variant-numeric:tabular-nums;
+    letter-spacing:.01em;
+    pointer-events:none;
+  }
+  .hud strong{letter-spacing:.06em;font-size:11.5px}
+
+  /* ---------- timeline / transport ---------- */
+  .timeline{padding:8px;border-top:1px solid var(--line);background:var(--well)}
+  .timeline-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}
+  .timeline-row span{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .transport-row{display:flex;align-items:center;gap:7px;flex-wrap:nowrap;margin-top:7px}
+  .transport-row label{display:flex;align-items:center;gap:6px}
+  .stereo-btn{
+    width:44px;height:38px;padding:0;
+    display:grid;place-items:center;
+    border-radius:var(--r-sm);font-size:19px;line-height:1;
+    background:linear-gradient(#253247,#162033);
+  }
+  .stereo-btn:hover{background:linear-gradient(#2c3b53,#1b2740)}
+  .stereo-btn.active{background:linear-gradient(#0c4a6e,#08364f)}
+  .mini-field{display:flex;align-items:center;gap:5px;white-space:nowrap}
+  .mini-field input[type=number]{width:3.4em;min-width:0;padding:5px 3px;text-align:center}
+  /* Rates like 29.97 and 119.88 need room; the spinner arrows eat width too. */
+  .mini-field input#fpsInput{width:5.2em;padding-right:2px}
+  .fps-hint{
+    padding:4px 8px;font-size:11px;line-height:1.2;white-space:nowrap;
+    border-radius:99px;border:1px solid #a16207;
+    background:#3f2d0a;color:#fbbf24;
+  }
+  .fps-hint:hover{background:#54390c;border-color:var(--accent2)}
+  .build-tag{
+    margin-left:auto;padding:3px 8px;border-radius:99px;
+    font-size:10.5px;letter-spacing:.06em;font-weight:700;
+    background:var(--well);border:1px solid var(--line);color:var(--muted);
+  }
+  .fps-hint.detected{
+    background:#0c3a24;border-color:#15803d;color:#4ade80;cursor:default;
+  }
+  .fps-hint.detected:hover{background:#0c3a24;border-color:#15803d}
+
+  /* ---------- tool cards under the video ---------- */
+  .under-video-tools{
+    display:grid;grid-template-columns:1fr 1.2fr;gap:8px;
+    padding:0 8px 8px;background:var(--well);
+  }
+  .tool-card{border:1px solid var(--line);border-radius:var(--r-md);padding:8px 10px;min-width:0}
+  .measurement-card{background:#162033}
+  .tracking-card{background:#142033}
+  .tool-card h3{
+    margin:0 0 7px;font-size:12px;
+    text-transform:uppercase;letter-spacing:.08em;
+  }
+  .measurement-card h3{color:#7dd3fc}
+  .tracking-card h3{color:#4ade80}
+  .tool-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .tool-row + .tool-row{margin-top:7px}
+  .tool-card button{padding:6px 9px;font-size:12px;border-radius:var(--r-sm)}
+  .tool-card label{display:flex;align-items:center;gap:5px;white-space:nowrap}
+  .tool-card select{padding:6px}
+  .tool-card input[type=number]{width:66px}
+  .tool-card input#calLength{width:4.5em;min-width:0}
+  .tool-card input#unitInput{width:3.3em;min-width:0}
+  .status{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.3}
+  .cal-accent{color:var(--calcolor);font-weight:600}
+
+  /* ---------- output side ---------- */
+  .side{
+    display:flex;flex-direction:column;min-height:0;height:100%;overflow:hidden;
+    background:#121b2c;border:1px solid var(--line);
+    border-radius:var(--r-md) var(--r-lg) var(--r-lg) var(--r-md);
+  }
+  .section-output{display:flex;flex-direction:column;min-height:0;height:100%}
+  /* No gap: the splitter supplies the separation between the two panes. */
+  .content{
+    display:flex;flex-direction:column;gap:0;
+    min-height:0;height:100%;overflow:hidden;
+    padding:8px 10px 10px;
+  }
+  #graphTab{
+    display:flex;flex-direction:column;
+    flex:0 0 auto;
+    height:var(--graph-pane,46%);
+    min-height:0;min-width:0;
+  }
+
+  /* Horizontal sibling of .splitter, dividing graph from table. */
+  .splitter-h{
+    flex:0 0 11px;
+    position:relative;cursor:row-resize;
+    touch-action:none;user-select:none;background:transparent;
+  }
+  .splitter-h::before{
+    content:"";position:absolute;inset:3px 0;
+    border-top:1px solid #475569;border-bottom:1px solid #475569;
+    background:var(--well);border-radius:var(--r-md);
+    transition:background .15s,border-color .15s;
+  }
+  .splitter-h::after{
+    content:"↕";position:absolute;left:50%;top:50%;
+    transform:translate(-50%,-50%);
+    color:var(--text);font-size:15px;font-weight:700;text-shadow:0 1px 2px #000;
+  }
+  .splitter-h:hover::before,.splitter-h.dragging::before{
+    background:#0c4a6e;border-color:var(--accent);
+  }
+  .content.graph-collapsed #graphTab{display:none}
+  .splitter-h.collapsed{flex-basis:22px}
+  .splitter-h.collapsed::after{
+    content:"▾ GRAPH";
+    font-size:10.5px;font-weight:700;letter-spacing:.09em;
+    padding:2px 10px;border-radius:99px;
+    background:var(--panel2);border:1px solid var(--line);
+    color:var(--muted);text-shadow:none;
+  }
+  .splitter-h.collapsed:hover::after{color:var(--text);border-color:var(--accent)}
+
+  /* ---------- graph ---------- */
+  .graph-toolbar{
+    display:flex;align-items:center;justify-content:center;
+    gap:8px;flex-wrap:nowrap;margin-bottom:8px;
+  }
+  .graph-toolbar label{display:flex;align-items:center;gap:5px}
+  /* The canvas used to be clamped to a fixed height band. It now grows and
+     shrinks with the pane so the splitter actually changes the plot size. */
+  /* min-height:0, not 90px: the old floor fought the pane's percentage height
+     and made the graph pane spill over and overlap the splitter and table. */
+  .graph-frame{position:relative;flex:1 1 auto;min-height:0;display:block;overflow:hidden}
+  .graph-canvas-wrap{width:100%;height:100%}
+  canvas.graph{
+    width:100%;height:100%;min-height:0;max-height:none;
+    background:var(--graph-bg);
+    border:1px solid #475569;border-radius:var(--r-md);
+  }
+  /* Floats over the plot instead of pushing it smaller. It used to sit between
+     the toolbar and the canvas and took 140px out of the graph it configures. */
+  .scale-panel{
+    display:none;
+    position:absolute;top:10px;right:10px;z-index:5;
+    grid-template-columns:auto 74px 74px;
+    gap:6px 8px;align-items:center;
+    width:max-content;max-width:calc(100% - 20px);
+    max-height:calc(100% - 20px);overflow:auto;
+    margin:0;padding:9px 11px;
+    border:1px solid var(--line);border-radius:var(--r-md);
+    background:rgba(11,18,32,.94);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    box-shadow:0 10px 28px rgba(2,6,23,.55);
+  }
+  .scale-panel.open{display:grid}
+
+  /* Floats over the plot like the scale panel, so it costs the graph no height. */
+  .selection-bar{
+    position:absolute;left:10px;top:10px;z-index:5;
+    display:flex;align-items:center;gap:9px;
+    padding:5px 9px;border-radius:99px;
+    border:1px solid #a16207;background:rgba(63,45,10,.94);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    font-size:12px;color:#fbbf24;
+  }
+  .selection-bar button{
+    padding:3px 8px;font-size:11px;border-radius:99px;
+    background:#54390c;border-color:#a16207;color:#fde68a;
+  }
+  .selection-bar button:hover{background:#6b4a10;border-color:var(--accent2)}
+
+  .fit-field{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+  .fit-field select{padding:5px 6px;font-size:12px}
+  .fit-field input[type=checkbox]{accent-color:var(--accent2)}
+
+  .fit-panel{
+    position:absolute;right:10px;bottom:10px;z-index:5;
+    max-width:min(340px,calc(100% - 20px));
+    padding:8px 11px;border-radius:var(--r-md);
+    border:1px solid #475569;background:rgba(11,18,32,.94);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    font-size:12px;line-height:1.5;color:var(--text);
+  }
+  .fit-panel .fit-eq{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:12.5px;color:#fbbf24;word-break:break-word;
+  }
+  .fit-panel .fit-meta{color:var(--muted);font-size:11px;margin-top:3px}
+  .fit-panel{cursor:grab;user-select:none;touch-action:none}
+  .fit-panel.dragging{cursor:grabbing;border-color:var(--accent2)}
+  .fit-panel::after{
+    content:"⠿";position:absolute;top:4px;right:7px;
+    font-size:10px;color:#64748b;letter-spacing:-1px;
+  }
+  .fit-panel .fit-warn{color:#fca5a5;font-size:11px;margin-top:3px}
+  .scale-panel .scale-head{color:var(--muted);font-size:12px;text-align:center}
+  .scale-panel .scale-axis{color:var(--text);font-size:12px;font-weight:600}
+  .scale-panel input{width:74px;padding:5px 6px}
+  .scale-actions{
+    grid-column:1 / -1;display:flex;justify-content:flex-end;gap:6px;margin-top:2px;
+  }
+  .scale-actions button{padding:5px 8px;font-size:12px}
+
+  /* ---------- data table ---------- */
+  /* min-height:0 is what lets a flex item shrink below its content size; with
+     the old 220px floor plus an auto-height ancestor the table simply grew. */
+  #dataTab{
+    flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:auto;
+    border:1px solid var(--line);border-radius:var(--r-md);
+    background:var(--well);
+  }
+  .data-toolbar{
+    position:sticky;top:0;z-index:4;
+    display:flex;justify-content:flex-end;
+    padding:6px 8px;background:var(--well);
+    border-bottom:1px solid var(--line);
+  }
+  .data-toolbar button{padding:5px 9px;font-size:12px}
+  #copyStatus{margin-right:auto;align-self:center;font-size:12px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  #dataTab table{margin:0}
+  #dataTab thead{position:sticky;top:39px;z-index:2;background:var(--panel)}
+  th,td{padding:6px 7px;border-bottom:1px solid var(--line);text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  th{
+    font-size:11px;letter-spacing:.04em;
+    color:var(--muted);font-weight:600;
+  }
+  td{font-variant-numeric:tabular-nums}
+  tr.current{background:rgba(56,189,248,.12)}
+  /* Excluded rows stay readable: the student needs to see what they left out. */
+  tr.excluded td{opacity:.38}
+  tr.in-selection td:first-child{box-shadow:inset 3px 0 0 var(--accent2)}
+  tr.selected{outline:1px solid var(--accent2)}
+  /* Spreadsheet-style rectangular cell selection */
+  #dataTab th,#dataTab td{
+    user-select:none;-webkit-user-select:none;cursor:cell;
+  }
+  #dataTab th.cell-selected,
+  #dataTab td.cell-selected{
+    background:rgba(56,189,248,.22)!important;
+    box-shadow:inset 0 0 0 1px rgba(56,189,248,.55);
+  }
+  #dataTab th.selection-anchor,
+  #dataTab td.selection-anchor{box-shadow:inset 0 0 0 2px var(--accent)}
+
+  /* ---------- responsive ---------- */
+  @media(max-width:1100px){
+    .under-video-tools{grid-template-columns:1fr}
+    .transport-row{flex-wrap:wrap}
+  }
+  @media(max-width:1000px){
+    /* Stacked: let the document scroll normally rather than pinning to 100vh. */
+    .app{height:auto;min-height:100vh}
+    .main{grid-template-columns:1fr;align-items:start}
+    .splitter,.splitter-h{display:none}
+    .video-wrap{flex:0 0 auto;min-height:380px}
+    .video-panel,.side{border-radius:var(--r-lg)}
+    .side{margin-top:10px;height:auto}
+    #graphTab{height:auto;min-height:0}
+    .graph-frame{flex:0 0 auto}
+    .graph-canvas-wrap{height:clamp(280px,36vh,350px)}
+    #dataTab{max-height:60vh}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="toolbar">
+    <input id="videoInput" type="file" accept="video/*" />
+    <span class="spacer"></span>
+    <button id="saveProjectBtn">Save project</button>
+    <button id="loadProjectBtn">Open project</button>
+    <input id="projectInput" class="hidden" type="file" accept=".mva,application/json">
+    <button id="exportCsvBtn">Export CSV</button>
+  </div>
+
+  <div class="main">
+    <section class="video-panel">
+      <div id="videoWrap" class="video-wrap">
+        <video id="video" preload="metadata"></video>
+        <canvas id="overlay" class="overlay" style="cursor:crosshair"></canvas>
+        <div id="hud" class="hud">Load a video to begin.</div>
+      </div>
+      <div class="timeline">
+        <div class="timeline-row">
+          <span id="frameLabel">Frame 0 / 0</span>
+          <input id="timelineRange" type="range" min="0" max="0" step="1" value="0">
+          <span id="timeLabel">0.000 s</span>
+        </div>
+        <div class="transport-row">
+          <button id="prevBtn" class="stereo-btn" title="Previous frame">|◀</button>
+          <button id="playBtn" class="stereo-btn" title="Play">▶</button>
+          <button id="nextBtn" class="stereo-btn" title="Next frame">▶|</button>
+          <label class="mini-field" title="Steps the transport. Timestamps are read from the video itself, so this no longer affects measured velocities.">FPS <input id="fpsInput" type="number" min="1" max="1000" step="0.001" value="30"></label>
+          <button id="fpsHint" class="fps-hint hidden" type="button"></button>
+          <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v34</span>
+          <label class="mini-field">Stride <input id="strideInput" type="number" min="1" max="99" step="1" value="1"></label>
+        </div>
+      </div>
+      <div class="under-video-tools">
+        <section class="tool-card measurement-card">
+          <h3>Measurement</h3>
+          <div class="tool-row">
+            <button id="calibrateBtn" title="Click to show or hide calibration. Double-click to recalibrate.">Calibrate</button>
+            <button id="axesToggleBtn">Hide axes</button>
+          </div>
+          <div class="tool-row">
+            <label>Calibration length <input id="calLength" type="number" min="0.000001" step="any" value="1"></label>
+            <label>Units <input id="unitInput" type="text" value="m"></label>
+          </div>
+          <div id="setupStatus" class="status">No calibration set. Axes are horizontal/vertical.</div>
+        </section>
+        <section class="tool-card tracking-card">
+          <h3>Tracking</h3>
+          <div class="tool-row">
+            <button id="trackBtn" class="active">Track points</button>
+            <button id="clearBtn" class="danger">Clear points</button>
+          </div>
+          <div class="tool-row">
+            <label>Visible points
+              <select id="pointDisplay">
+                <option value="current">Current</option>
+                <option value="recent" selected>Last 5</option>
+                <option value="all">All</option>
+              </select>
+            </label>
+            <label>Auto-advance
+              <select id="autoAdvance">
+                <option value="1" selected>On</option>
+                <option value="0">Off</option>
+              </select>
+            </label>
+          </div>
+          <div class="tool-row">
+            <label>Time origin
+              <select id="timeOrigin">
+                <option value="first" selected>First tracked point</option>
+                <option value="video">Video start</option>
+              </select>
+            </label>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <div id="splitter" class="splitter" title="Drag to resize panels. Double-click to reset."></div>
+
+    <aside class="side">
+      <div class="section-output">
+        <div class="content">
+          <div id="graphTab">
+            <div class="graph-toolbar">
+              <label>Plot
+                <select id="graphSelect">
+                  <option value="x">x vs t</option>
+                  <option value="y" selected>y vs t</option>
+                  <option value="vx">vx vs t</option>
+                  <option value="vy">vy vs t</option>
+                  <option value="speed">speed vs t</option>
+                  <option value="trajectory">y vs x</option>
+                </select>
+              </label>
+              <button id="autoscaleBtn">Autoscale</button>
+              <button id="manualScaleBtn">Manual scale</button>
+              <label class="fit-field">Fit
+                <select id="fitSelect">
+                  <option value="none">none</option>
+                  <option value="linear">linear</option>
+                  <option value="quadratic">quadratic</option>
+                  <option value="sinusoidal">sinusoidal</option>
+                </select>
+              </label>
+            </div>
+
+            <div id="graphLimits" class="graph-frame">
+              <div id="scalePanel" class="scale-panel">
+                <span></span>
+                <span class="scale-head">Minimum</span>
+                <span class="scale-head">Maximum</span>
+
+                <span id="hScaleLabel" class="scale-axis">Horizontal</span>
+                <input id="xMin" type="number" step="any" aria-label="Horizontal minimum">
+                <input id="xMax" type="number" step="any" aria-label="Horizontal maximum">
+
+                <span id="vScaleLabel" class="scale-axis">Vertical</span>
+                <input id="yMin" type="number" step="any" aria-label="Vertical minimum">
+                <input id="yMax" type="number" step="any" aria-label="Vertical maximum">
+
+                <div class="scale-actions">
+                  <button id="cancelScaleBtn">Close</button>
+                  <button id="applyScaleBtn">Apply</button>
+                </div>
+              </div>
+              <div id="fitPanel" class="fit-panel hidden"></div>
+              <div id="selectionBar" class="selection-bar hidden">
+                <span id="selectionCount"></span>
+                <button id="clearSelectionBtn" type="button" title="Also: double-click the plot">Clear selection</button>
+              </div>
+              <div class="graph-canvas-wrap">
+                <canvas id="graph" class="graph" width="800" height="500"></canvas>
+              </div>
+            </div>
+          </div>
+          <div id="outputSplitter" class="splitter-h" title="Drag to resize the graph and table. Double-click to reset."></div>
+          <div id="dataTab">
+            <div class="data-toolbar">
+              <span id="copyStatus">Click headers or drag cells; then Ctrl/Cmd+C</span>
+              <button id="copyDataBtn">Copy data</button>
+            </div>
+            <table>
+              <thead><tr>
+                <th title="Click to select this column">Frame</th>
+                <th id="timeHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">t (s)</th>
+                <th id="xHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">x</th>
+                <th id="yHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">y</th>
+                <th id="vxHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">vx</th>
+                <th id="vyHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">vy</th>
+                <th id="speedHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">speed</th>
+              </tr></thead>
+              <tbody id="dataBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const video = $('video'), wrap = $('videoWrap'), overlay = $('overlay'), ctx = overlay.getContext('2d');
+  const graph = $('graph'), gctx = graph.getContext('2d');
+  const main = document.querySelector('.main');
+  const splitter = $('splitter');
+  const SPLIT_KEY = 'mva-panel-split-v12';
+  const DEFAULT_SPLIT = 66;
+
+  function clamp(value,min,max){return Math.max(min,Math.min(max,value));}
+  function applySplit(percent,save=true){
+    const clamped=clamp(percent,35,78);
+    main.style.setProperty('--left-pane',`${clamped}%`);
+    if(save){try{localStorage.setItem(SPLIT_KEY,String(clamped));}catch{}}
+    requestAnimationFrame(()=>{resizeOverlay();resizeGraphCanvas();});
+  }
+  function resizeGraphCanvas(){
+    const rect=graph.getBoundingClientRect();
+    // Collapsed, or not laid out yet - nothing to size and nothing to draw.
+    if(rect.width<2||rect.height<2) return;
+    const ratio=window.devicePixelRatio||1;
+    const width=Math.max(1,Math.round(rect.width*ratio));
+    const height=Math.max(1,Math.round(rect.height*ratio));
+    if(graph.width!==width||graph.height!==height){
+      graph.width=width;graph.height=height;
+      gctx.setTransform(ratio,0,0,ratio,0,0);
+    }
+    drawGraph();
+  }
+  (function initSplitter(){
+    let saved=DEFAULT_SPLIT;
+    // getItem returns null for an unset key and Number(null) is 0, which is
+    // finite - so a first run used to clamp to 35% instead of the 66% default.
+    try{
+      const raw=localStorage.getItem(SPLIT_KEY);
+      const stored=raw===null?NaN:Number(raw);
+      if(Number.isFinite(stored)&&stored>0)saved=stored;
+    }catch{}
+    applySplit(saved,false);
+    let dragging=false;
+    splitter.addEventListener('pointerdown',e=>{
+      if(window.innerWidth<=1000)return;
+      dragging=true;splitter.classList.add('dragging');splitter.setPointerCapture(e.pointerId);document.body.style.cursor='col-resize';e.preventDefault();
+    });
+    splitter.addEventListener('pointermove',e=>{
+      if(!dragging)return;
+      const rect=main.getBoundingClientRect();
+      applySplit(((e.clientX-rect.left)/rect.width)*100,true);
+    });
+    const stop=e=>{if(!dragging)return;dragging=false;splitter.classList.remove('dragging');document.body.style.cursor='';try{splitter.releasePointerCapture(e.pointerId)}catch{}};
+    splitter.addEventListener('pointerup',stop);
+    splitter.addEventListener('pointercancel',stop);
+    splitter.addEventListener('dblclick',()=>applySplit(DEFAULT_SPLIT,true));
+  })();
+
+  const outputPane=document.querySelector('.content');
+  const outputSplitter=$('outputSplitter');
+  const VSPLIT_KEY='mva-output-split-v1';
+  const VCOLLAPSE_KEY='mva-output-collapsed-v1';
+  const DEFAULT_VSPLIT=46;
+  // Thresholds are in pixels, not percent: the same percentage is a usable
+  // graph on a tall window and a sliver on a short one. Collapse and restore
+  // differ so the graph does not strobe while the handle crosses the boundary.
+  const GRAPH_COLLAPSE_AT=235;
+  const GRAPH_RESTORE_AT=270;
+  const TABLE_MIN_PX=110;
+  const SPLITTER_PX=11;
+
+  let graphCollapsed=false;
+  let graphPercent=DEFAULT_VSPLIT;
+
+  function renderOutputSplit(){
+    outputPane.classList.toggle('graph-collapsed',graphCollapsed);
+    outputSplitter.classList.toggle('collapsed',graphCollapsed);
+    outputSplitter.title=graphCollapsed
+      ? 'Graph hidden. Drag down to bring it back. Double-click to reset.'
+      : 'Drag to resize the graph and table. Double-click to reset.';
+    outputPane.style.setProperty('--graph-pane',graphCollapsed?'0px':`${graphPercent}%`);
+    requestAnimationFrame(resizeGraphCanvas);
+  }
+  function persistOutputSplit(){
+    try{
+      localStorage.setItem(VSPLIT_KEY,String(graphPercent));
+      localStorage.setItem(VCOLLAPSE_KEY,graphCollapsed?'1':'0');
+    }catch{}
+  }
+  // Takes a requested graph-pane height in px and decides collapsed vs sized.
+  function setGraphPaneHeight(px,save=true){
+    const total=outputPane.getBoundingClientRect().height;
+    if(total<=0) return;
+    const maxPx=Math.max(0,total-SPLITTER_PX-TABLE_MIN_PX);
+    // On a container too short for the normal restore threshold, dragging to
+    // the bottom-most position still brings the graph back.
+    const restoreAt=Math.min(GRAPH_RESTORE_AT,maxPx);
+
+    if(graphCollapsed){
+      if(px<restoreAt){renderOutputSplit();if(save)persistOutputSplit();return;}
+      graphCollapsed=false;
+    }else if(px<GRAPH_COLLAPSE_AT){
+      graphCollapsed=true;
+      renderOutputSplit();if(save)persistOutputSplit();return;
+    }
+
+    graphPercent=clamp((Math.min(px,maxPx)/total)*100,4,96);
+    renderOutputSplit();
+    if(save)persistOutputSplit();
+  }
+  (function initOutputSplitter(){
+    try{
+      const raw=localStorage.getItem(VSPLIT_KEY);
+      const stored=raw===null?NaN:Number(raw);
+      if(Number.isFinite(stored)&&stored>0)graphPercent=clamp(stored,4,96);
+      graphCollapsed=localStorage.getItem(VCOLLAPSE_KEY)==='1';
+    }catch{}
+    renderOutputSplit();
+    let dragging=false;
+    outputSplitter.addEventListener('pointerdown',e=>{
+      if(window.innerWidth<=1000)return;
+      dragging=true;outputSplitter.classList.add('dragging');
+      outputSplitter.setPointerCapture(e.pointerId);
+      document.body.style.cursor='row-resize';e.preventDefault();
+    });
+    outputSplitter.addEventListener('pointermove',e=>{
+      if(!dragging)return;
+      const rect=outputPane.getBoundingClientRect();
+      setGraphPaneHeight(e.clientY-rect.top-SPLITTER_PX/2,true);
+    });
+    const stop=e=>{
+      if(!dragging)return;
+      dragging=false;outputSplitter.classList.remove('dragging');
+      document.body.style.cursor='';
+      try{outputSplitter.releasePointerCapture(e.pointerId)}catch{}
+    };
+    outputSplitter.addEventListener('pointerup',stop);
+    outputSplitter.addEventListener('pointercancel',stop);
+    outputSplitter.addEventListener('dblclick',()=>{
+      graphCollapsed=false;
+      graphPercent=DEFAULT_VSPLIT;
+      renderOutputSplit();
+      persistOutputSplit();
+    });
+  })();
+
+  const state = {
+    videoName:'', videoSize:0, videoDuration:0,
+    fps:30, stride:1, mode:'track',
+    calibration:null, calibrationDraft:[], calibrationVisible:true, calHover:null,
+    origin:{x:0.18,y:0.82}, angle:0, axesVisible:true,
+    points:[], selectedIndex:-1, hoverIndex:-1, rotHover:false, dragging:null,
+    pointDisplay:'recent', recentCount:5, autoAdvance:true, timeOrigin:'first',
+    graphLimits:{xmin:null,xmax:null,ymin:null,ymax:null}, graphLimitsManual:false,
+    undoStack:[], dragSnapshot:null, expectedVideo:null,
+    // Selection lives on the points (by frame), not on an axis range, so it
+    // survives switching graph type: pick the free-fall arc on y vs t and the
+    // same physical interval stays chosen on vx vs t.
+    selection:null,
+    // One fit per plotted quantity. A quadratic on y vs t is a claim about y,
+    // so it must not follow you to x vs t - but it should still be there when
+    // you come back to y vs t.
+    fitModels:{}
+  };
+
+  // ---- Timing ---------------------------------------------------------
+  // requestVideoFrameCallback reports mediaTime: the presentation timestamp of
+  // the frame actually painted. That is the ground truth. video.currentTime is
+  // only what we asked for, and after a seek the decoder shows the nearest real
+  // frame, which is not always the same moment.
+  let presentedTime=null;
+  let presentedFrames=null;
+  const hasFrameCallback = typeof video.requestVideoFrameCallback === 'function';
+
+  function mediaTimeNow(){
+    // presentedTime is only trustworthy while it still describes the frame the
+    // decoder is showing. If it has not been refreshed since the last seek, or
+    // it has drifted more than a frame from where we asked to be, it is stale:
+    // fall back to currentTime, which mid-frame seeking keeps within half a
+    // frame of the truth. Without this guard a dropped frame callback froze the
+    // reported time, every click resolved to the same frame index, and each new
+    // point overwrote the previous one.
+    return mediaTimeInfo().t;
+  }
+
+  // Distinguishes the two sources, because they need different rounding.
+  // A presented timestamp names the START of a frame; currentTime after a
+  // mid-frame seek sits in the MIDDLE of one.
+  function mediaTimeInfo(){
+    if(presentedTime==null) return {t:video.currentTime,exact:false};
+    // Seeks land mid-frame, so a CURRENT timestamp sits 0.5 frames from
+    // currentTime and a stale one sits 1.5 frames away. The threshold must fall
+    // between them: 0.9 frames. The old 0.05 s floor equalled exactly 1.5 frames
+    // at 30 fps, so a one-frame-old value landed on the boundary and was
+    // accepted about half the time - which is why advancing sometimes needed a
+    // second click.
+    const frame=1/Math.max(1,state.fps);
+    if(Math.abs(presentedTime-video.currentTime)>0.9*frame) return {t:video.currentTime,exact:false};
+    return {t:presentedTime,exact:true};
+  }
+
+  // The chain re-registers itself, so guard against starting a second one.
+  let pumpActive=false;
+  function pumpFrameCallback(){
+    if(!hasFrameCallback||pumpActive) return;
+    pumpActive=true;
+    const step=(now,meta)=>{
+      // A callback queued before a seek can arrive after it, carrying the OLD
+      // frame's time. Accept the value only if it plausibly describes where we
+      // are now; otherwise leave presentedTime null so we fall back cleanly.
+      const frame=1/Math.max(1,state.fps);
+      const plausible=video.paused
+        ? Math.abs(meta.mediaTime-video.currentTime)<=0.9*frame
+        : true;
+      if(plausible){
+        presentedTime=meta.mediaTime;
+        presentedFrames=meta.presentedFrames;
+        noteFpsSample();
+        updatePlaybackIndicators();
+      }
+      video.requestVideoFrameCallback(step);
+    };
+    video.requestVideoFrameCallback(step);
+  }
+
+  // Estimating the real frame rate from presentedFrames, so nobody has to guess.
+  let fpsSample=null, measuredFps=null;
+  function resetFpsSample(){ fpsSample=null; }
+  function noteFpsSample(){
+    if(video.paused||presentedFrames==null||presentedTime==null){ fpsSample=null; return; }
+    if(fpsSample===null){ fpsSample={frames:presentedFrames,time:presentedTime}; return; }
+    const df=presentedFrames-fpsSample.frames;
+    const dt=presentedTime-fpsSample.time;
+    if(df>=12 && dt>0.25){
+      const estimate=df/dt;
+      if(Number.isFinite(estimate)&&estimate>1&&estimate<1000){
+        measuredFps=estimate;
+        updateFpsHint();
+      }
+      fpsSample={frames:presentedFrames,time:presentedTime};
+    }
+  }
+  function updateFpsHint(){
+    const hint=$('fpsHint');
+    if(measuredFps==null||Math.abs(measuredFps-state.fps)/state.fps<0.01){
+      hint.classList.add('hidden');
+      return;
+    }
+    const rounded=Math.round(measuredFps*100)/100;
+    hint.textContent=`video looks like ${rounded} fps — use it`;
+    hint.title=`Measured from the video's own frame timestamps. Click to set the step rate to ${rounded}.`;
+    hint.classList.remove('hidden');
+  }
+  // Measures the real frame rate by playing a fraction of a second muted and
+  // counting presented frames, then restores the previous position. Runs once
+  // per loaded video; the FPS field stays editable as an override.
+  let detectionRan=false;
+  function detectFrameRate(){
+    if(detectionRan||!hasFrameCallback||!Number.isFinite(video.duration)) return;
+    detectionRan=true;
+    const wasMuted=video.muted, resumeAt=video.currentTime;
+    let startFrames=null, startTime=null, finished=false;
+
+    const finish=detected=>{
+      if(finished) return;
+      finished=true;
+      clearTimeout(timeout);
+      video.pause();
+      video.muted=wasMuted;
+      video.currentTime=resumeAt;
+      if(detected!=null&&Number.isFinite(detected)&&detected>1&&detected<1000){
+        measuredFps=detected;
+        const rounded=Math.round(detected*100)/100;
+        // A loaded project may have deliberately chosen a different step rate,
+        // so offer rather than impose when the user already had a preference.
+        if(fpsWasUserSet){
+          updateFpsHint();
+        }else{
+          applyFps(rounded);
+          announceDetectedFps(rounded);
+        }
+      }
+    };
+
+    const sample=(now,meta)=>{
+      if(finished) return;
+      if(startFrames===null){
+        startFrames=meta.presentedFrames; startTime=meta.mediaTime;
+      }else{
+        const df=meta.presentedFrames-startFrames;
+        const dt=meta.mediaTime-startTime;
+        if(df>=8&&dt>0.15){ finish(df/dt); return; }
+      }
+      video.requestVideoFrameCallback(sample);
+    };
+
+    const timeout=setTimeout(()=>finish(null),2500);
+    video.muted=true;
+    video.requestVideoFrameCallback(sample);
+    const started=video.play();
+    if(started&&typeof started.catch==='function') started.catch(()=>finish(null));
+  }
+
+  function announceDetectedFps(rate){
+    const hint=$('fpsHint');
+    hint.textContent=`detected ${rate} fps`;
+    hint.title='Measured from the video\'s own frame timestamps. Edit the field to override.';
+    hint.classList.remove('hidden');
+    hint.classList.add('detected');
+    setTimeout(()=>{
+      hint.classList.remove('detected');
+      updateFpsHint();
+    },4000);
+  }
+
+  let fpsWasUserSet=false;
+  function applyFps(value){
+    state.fps=Math.min(1000,Math.max(1,value||30));
+    $('fpsInput').value=state.fps;
+    // Frame indices are display labels derived from the measured time. Rebuild
+    // them so the labels and the transport agree with the new step rate; the
+    // stored t, and therefore every computed velocity, is untouched.
+    state.points.forEach(p=>{
+      if(Number.isFinite(p.t)) p.frame=Math.max(0,Math.floor(p.t*state.fps+1e-6));
+    });
+    updateFpsHint();
+    draw();
+  }
+
+  function frameCount(){
+    if (!Number.isFinite(video.duration) || !state.fps) return 0;
+    return Math.max(0, Math.round(video.duration * state.fps));
+  }
+  // Frame indices run 0 .. frameCount()-1. Seeking to frameCount() asked for a
+  // time at or past the end of the media, so End (and clamping generally) landed
+  // on a frame that does not exist.
+  function lastFrame(){ return Math.max(0, frameCount() - 1); }
+  function currentFrame(){
+    const {t,exact}=mediaTimeInfo();
+    // A frame start of 1/30 s comes back as 0.033333..., and 0.033333 * 30 is
+    // 0.9999999 - so flooring it yields frame 0 instead of frame 1. Rounding a
+    // known frame start absorbs that, and tolerates decoder timestamps that are
+    // not exact rationals. A mid-frame currentTime still floors, since it
+    // legitimately sits part-way through the frame it names.
+    const index = exact
+      ? Math.round(t * state.fps)
+      : Math.floor(t * state.fps + 1e-6);
+    return Math.max(0, Math.min(lastFrame(), index));
+  }
+  function seekFrame(f){
+    f = Math.max(0, Math.min(lastFrame(), Math.round(f)));
+    // Aim at the middle of the frame interval. Seeking to f/fps targets the exact
+    // boundary between frames f-1 and f, where floating-point rounding against the
+    // container's timestamps decides which one you actually get.
+    video.currentTime = (f + 0.5) / state.fps;
+  }
+  function resizeOverlay(){
+    const r = wrap.getBoundingClientRect();
+    overlay.width = Math.max(1, Math.round(r.width * devicePixelRatio));
+    overlay.height = Math.max(1, Math.round(r.height * devicePixelRatio));
+    overlay.style.width = r.width+'px'; overlay.style.height = r.height+'px';
+    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+    draw();
+  }
+  function videoRect(){
+    const wr = wrap.getBoundingClientRect(), vr = video.getBoundingClientRect();
+    return {x:vr.left-wr.left,y:vr.top-wr.top,w:vr.width,h:vr.height};
+  }
+  function normFromEvent(e){
+    const vr = videoRect(), r = overlay.getBoundingClientRect();
+    const x=e.clientX-r.left, y=e.clientY-r.top;
+    return {x:(x-vr.x)/vr.w,y:(y-vr.y)/vr.h, sx:x, sy:y};
+  }
+  function insideVideoPoint(p){
+    return Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>=0 && p.x<=1 && p.y>=0 && p.y<=1;
+  }
+  function screenFromNorm(p){
+    const vr=videoRect(); return {x:vr.x+p.x*vr.w,y:vr.y+p.y*vr.h};
+  }
+  function rawToWorld(p){
+    // Convert normalized coordinates using the video's intrinsic pixel dimensions,
+    // not its current on-screen size. This keeps all coordinates unchanged when
+    // the video/tools panels are resized.
+    // A zero pixelLength would make the scale infinite and poison every row
+    // with NaN, so fall back to raw pixels rather than propagating it.
+    const cal = state.calibration;
+    const scale = (cal && cal.pixelLength > 0) ? cal.realLength/cal.pixelLength : 1;
+    const intrinsicW = video.videoWidth || 1;
+    const intrinsicH = video.videoHeight || 1;
+    const dx=(p.x-state.origin.x)*intrinsicW*scale;
+    const dy=-(p.y-state.origin.y)*intrinsicH*scale;
+    const c=Math.cos(state.angle), s=Math.sin(state.angle);
+    return {x:dx*c+dy*s, y:-dx*s+dy*c};
+  }
+  function isCurrentFramePoint(i){return i>=0 && state.points[i] && state.points[i].frame===currentFrame();}
+    function pointAtFrame(f){ return state.points.findIndex(p=>p.frame===f); }
+
+  function draw(){
+    const w=overlay.clientWidth,h=overlay.clientHeight;
+    ctx.clearRect(0,0,w,h);
+    if (!video.videoWidth) return;
+    const vr=videoRect();
+    ctx.save(); ctx.beginPath(); ctx.rect(vr.x,vr.y,vr.w,vr.h); ctx.clip();
+
+    if (state.calibration && state.calibrationVisible){
+      drawCalibration();
+    }
+    if (state.calibrationDraft.length===1){
+      const a=screenFromNorm(state.calibrationDraft[0]);
+      ctx.fillStyle='#c084fc'; ctx.beginPath(); ctx.arc(a.x,a.y,5,0,Math.PI*2); ctx.fill();
+    }
+
+    if(state.axesVisible) drawAxes();
+    drawPoints();
+    ctx.restore();
+    updateUI();
+  }
+  // The endpoints are grab handles, so draw them like the origin handle:
+  // larger, ringed, and lit up on hover or drag.
+  function drawCalibration(){
+    const a=screenFromNorm(state.calibration.a), b=screenFromNorm(state.calibration.b);
+    ctx.strokeStyle='#c084fc';ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    [['a',a],['b',b]].forEach(([key,p])=>{
+      const active=state.calHover===key||state.dragging===('cal-'+key);
+      ctx.fillStyle=active?'#e9d5ff':'#c084fc';
+      ctx.beginPath();ctx.arc(p.x,p.y,active?8:6,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=active?'#ffffff':'#6b21a8';
+      ctx.lineWidth=active?2.5:1.5;
+      ctx.stroke();
+    });
+  }
+
+  const CAL_HANDLE_RADIUS=14;
+  // Only grabbable in track mode: in calibrate mode a click must always start a
+  // fresh stick, or double-click-to-recalibrate would grab instead of restart.
+  function calibrationHandleAt(sx,sy){
+    if(!state.calibration||!state.calibrationVisible||state.mode!=='track') return null;
+    const a=screenFromNorm(state.calibration.a), b=screenFromNorm(state.calibration.b);
+    const da=Math.hypot(sx-a.x,sy-a.y), db=Math.hypot(sx-b.x,sy-b.y);
+    if(da<=CAL_HANDLE_RADIUS && da<=db) return 'a';
+    if(db<=CAL_HANDLE_RADIUS) return 'b';
+    return null;
+  }
+
+  // Move one end and rescale. Rejects a move that would collapse the stick.
+  function moveCalibrationHandle(key,p){
+    const other = key==='a' ? state.calibration.b : state.calibration.a;
+    const px=Math.hypot((p.x-other.x)*video.videoWidth,(p.y-other.y)*video.videoHeight);
+    if(!(px>0)) return false;
+    state.calibration[key]={x:p.x,y:p.y};
+    state.calibration.pixelLength=px;
+    return true;
+  }
+
+  const AXIS_LENGTH=95;
+  const HANDLE_HIT_RADIUS=14;
+  const ROTATE_RING_RADIUS=10;
+  const ROTATE_RING_OFFSET=5.5;
+
+  // One source of truth for the axis handles, shared by the drawing code and
+  // both hit tests, so what you can see and what you can grab cannot drift.
+  function axisGeometry(){
+    const o=screenFromNorm(state.origin);
+    const c=Math.cos(state.angle), s=Math.sin(state.angle);
+    const xEnd={x:o.x+AXIS_LENGTH*c, y:o.y-AXIS_LENGTH*s};
+    const yEnd={x:o.x-AXIS_LENGTH*s, y:o.y-AXIS_LENGTH*c};
+    // The arrowhead's tip is at xEnd and its body runs back along the axis, so
+    // a ring centred on xEnd would leave the head in its rear half. Step back
+    // to the head's midpoint so the two are concentric.
+    const rotate={x:xEnd.x-ROTATE_RING_OFFSET*c, y:xEnd.y+ROTATE_RING_OFFSET*s};
+    return {origin:o, xEnd, yEnd, rotate};
+  }
+
+  function drawRotationRing(center,hot){
+    ctx.beginPath();
+    ctx.arc(center.x,center.y,ROTATE_RING_RADIUS,0,Math.PI*2);
+    // Dark halo underneath so the ring stays legible over bright footage.
+    ctx.strokeStyle='rgba(2,6,23,.7)';
+    ctx.lineWidth=hot?5.5:5;
+    ctx.stroke();
+    ctx.strokeStyle=hot?'#e0f2fe':'#7dd3fc';
+    ctx.lineWidth=hot?3:2.5;
+    ctx.stroke();
+  }
+
+  function drawAxes(){
+    const geo=axisGeometry();
+
+    axisArrow(geo.origin,geo.xEnd,'#38bdf8','x');
+    axisArrow(geo.origin,geo.yEnd,'#22c55e','y');
+
+    ctx.fillStyle='#e5e7eb';
+    ctx.beginPath();
+    ctx.arc(geo.origin.x,geo.origin.y,7,0,Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle='#0f172a';
+    ctx.lineWidth=2;
+    ctx.stroke();
+
+    // Open ring marks the rotation handle. Being rotationally symmetric it
+    // needs no counter-rotation, leaves the arrowhead readable through it, and
+    // keeps curved-arrow notation out of a physics coordinate system.
+    drawRotationRing(geo.rotate, state.rotHover||state.dragging==='rotate');
+  }
+  function axisArrow(a,b,color,label){
+    ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    const ang=Math.atan2(b.y-a.y,b.x-a.x);
+    ctx.beginPath();ctx.moveTo(b.x,b.y);
+    ctx.lineTo(b.x-11*Math.cos(ang-.45),b.y-11*Math.sin(ang-.45));
+    ctx.lineTo(b.x-11*Math.cos(ang+.45),b.y-11*Math.sin(ang+.45));ctx.closePath();ctx.fill();
+    const along=label==='x'?18:10;
+    const normal=label==='x'?-7:-5;
+    const lx=b.x+along*Math.cos(ang)-normal*Math.sin(ang);
+    const ly=b.y+along*Math.sin(ang)+normal*Math.cos(ang);
+    ctx.font='bold 15px sans-serif';
+    ctx.fillText(label,lx,ly);
+  }
+  function visiblePointIndices(){
+    const f=currentFrame();
+    if(state.pointDisplay==='current'){
+      // Prefer a point on the exact video frame. If auto-advance has moved
+      // to the next untracked frame, keep the selected or most recent point visible.
+      const exact=state.points.map((p,i)=>p.frame===f?i:-1).filter(i=>i>=0);
+      if(exact.length) return exact;
+      if(state.selectedIndex>=0 && state.points[state.selectedIndex]) return [state.selectedIndex];
+      const previous=state.points
+        .map((p,i)=>({p,i}))
+        .filter(o=>o.p.frame<=f)
+        .sort((a,b)=>b.p.frame-a.p.frame)[0];
+      return previous?[previous.i]:[];
+    }
+    if(state.pointDisplay==='recent'){
+      return state.points
+        .map((p,i)=>({p,i}))
+        .filter(o=>o.p.frame<=f)
+        .sort((a,b)=>a.p.frame-b.p.frame)
+        .slice(-state.recentCount)
+        .map(o=>o.i);
+    }
+    return state.points.map((_,i)=>i);
+  }
+  function nearestPoint(sx,sy,radius,visibleOnly=true){
+    const visible = new Set(visiblePointIndices());
+    let bestIndex = -1;
+    let bestDistance = Infinity;
+
+    state.points.forEach((point,index)=>{
+      if(visibleOnly && !visible.has(index)) return;
+      const screen = screenFromNorm(point);
+      const distance = Math.hypot(screen.x-sx,screen.y-sy);
+      if(distance<=radius && distance<bestDistance){
+        bestIndex=index;
+        bestDistance=distance;
+      }
+    });
+
+    return bestIndex;
+  }
+
+  function drawPoints(){
+    const inds=visiblePointIndices(), f=currentFrame();
+    if(state.pointDisplay!=='current' && inds.length>1){
+      ctx.strokeStyle='rgba(239,68,68,.65)';ctx.lineWidth=2;ctx.beginPath();
+      inds.forEach((i,k)=>{const s=screenFromNorm(state.points[i]); if(k===0)ctx.moveTo(s.x,s.y);else ctx.lineTo(s.x,s.y)});
+      ctx.stroke();
+    }
+    inds.forEach(i=>{
+      const p=state.points[i], s=screenFromNorm(p);
+      const current=p.frame===f, selected=i===state.selectedIndex, hovered=i===state.hoverIndex;
+      ctx.fillStyle=selected?'#f59e0b':hovered?'#fde68a':current?'#fff':'#ef4444';
+      ctx.strokeStyle=selected?'#fff':hovered?'#f59e0b':'#7f1d1d';ctx.lineWidth=selected||hovered?3:2;
+      ctx.beginPath();ctx.arc(s.x,s.y,selected?9:hovered?8:current?7:5,0,Math.PI*2);ctx.fill();ctx.stroke();
+      ctx.fillStyle='#fff';ctx.font='11px sans-serif';ctx.fillText(String(p.frame),s.x+8,s.y-8);
+    });
+  }
+
+  function finiteDiff(data,key,i){
+    if(data.length<2)return 0;
+    if(i===0){const dt=data[1].t-data[0].t;return dt?(data[1][key]-data[0][key])/dt:0;}
+    if(i===data.length-1){const dt=data[i].t-data[i-1].t;return dt?(data[i][key]-data[i-1][key])/dt:0;}
+    const dt=data[i+1].t-data[i-1].t; return dt?(data[i+1][key]-data[i-1][key])/dt:0;
+  }
+  // Projects saved before timestamps existed stored only a frame index; fall back
+  // to the old derivation for those so old .mva files still open.
+  function pointTime(p){
+    return Number.isFinite(p.t) ? p.t : p.frame/state.fps;
+  }
+  function computed(){
+    const sorted=[...state.points].sort((a,b)=>pointTime(a)-pointTime(b));
+    const t0=(state.timeOrigin==='first' && sorted.length)?pointTime(sorted[0]):0;
+    const rows=sorted.map(p=>{
+      const q=rawToWorld(p); return {...p,t:pointTime(p)-t0,x:q.x,y:q.y};
+    });
+    rows.forEach((r,i)=>{r.vx=finiteDiff(rows,'x',i);r.vy=finiteDiff(rows,'y',i);r.speed=Math.hypot(r.vx,r.vy)});
+    return rows;
+  }
+  function updateUI(){
+    updatePlaybackIndicators();
+    const cal=state.calibration;
+    $('calibrateBtn').textContent=cal
+      ? (state.calibrationVisible?'Hide calibration':'Show calibration')
+      : 'Calibrate';
+    $('axesToggleBtn').textContent=state.axesVisible?'Hide axes':'Show axes';
+    $('setupStatus').innerHTML=cal
+      ? `<span class="cal-accent">Calibration:</span> ${cal.realLength} ${cal.unit} = ${cal.pixelLength.toFixed(1)} px&nbsp;&nbsp;&nbsp;<span class="cal-accent">Axes:</span> ${(state.angle*180/Math.PI).toFixed(1)}°`
+      : `No calibration set.&nbsp;&nbsp;&nbsp;<span class="cal-accent">Axes:</span> ${(state.angle*180/Math.PI).toFixed(1)}°`;
+    scheduleOutputs();
+  }
+  const MODE_BUTTONS={calibrate:'calibrateBtn',track:'trackBtn'};
+  function setMode(mode){
+    state.mode=mode; state.dragging=null;
+    Object.values(MODE_BUTTONS).forEach(id=>$(id).classList.remove('active'));
+    const activeId=MODE_BUTTONS[mode];
+    if(activeId) $(activeId).classList.add('active');
+    draw();
+  }
+
+
+  function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
+  // Every 'points' entry clones the whole array, so an unbounded stack grew
+  // without limit over a long tracking session.
+  const UNDO_LIMIT=200;
+  function pushAction(action){
+    state.undoStack.push(action);
+    if(state.undoStack.length>UNDO_LIMIT) state.undoStack.shift();
+  }
+  function applyAction(action, direction){
+    const value = direction==='undo' ? action.before : action.after;
+    if(action.type==='selection'){ state.selection=value?[...value]:null; updateSelectionBar(); }
+    else if(action.type==='points') state.points=clone(value);
+    else if(action.type==='origin') state.origin=clone(value);
+    else if(action.type==='angle') state.angle=value;
+    else if(action.type==='calibration') state.calibration=clone(value);
+    state.selectedIndex=-1;
+    // An in-progress calibration click would otherwise survive the undo and
+    // combine with the next click to build a bogus calibration stick.
+    state.calibrationDraft=[];
+    pruneSelection();
+    syncCalibrationInputs();
+    draw();
+  }
+  function undo(){
+    const action=state.undoStack.pop();
+    if(!action)return;
+    applyAction(action,'undo');
+  }
+
+  overlay.addEventListener('pointerdown',e=>{
+    e.preventDefault();
+    const p=normFromEvent(e);
+    if(!insideVideoPoint(p)) return;
+
+    if(!video.paused) video.pause();
+
+    const geo=axisGeometry();
+
+    // Neither handle is drawn when the axes are hidden, so neither should be
+    // grabbable. Dragging an unseen origin silently shifted every coordinate
+    // in the table with nothing on screen to explain it.
+    if(state.axesVisible && Math.hypot(p.sx-geo.rotate.x,p.sy-geo.rotate.y)<HANDLE_HIT_RADIUS){
+      state.dragging='rotate';
+      state.rotHover=true;
+      state.dragSnapshot=state.angle;
+      overlay.setPointerCapture(e.pointerId);
+      draw();
+      return;
+    }
+
+    if(state.axesVisible && Math.hypot(p.sx-geo.origin.x,p.sy-geo.origin.y)<HANDLE_HIT_RADIUS){
+      state.dragging='origin';
+      state.dragSnapshot=clone(state.origin);
+      overlay.setPointerCapture(e.pointerId);
+      return;
+    }
+
+    // Tested after the axis handles, matching the draw order: the axes sit on
+    // top of the calibration stick, so they win an overlapping click.
+    const calHandle=calibrationHandleAt(p.sx,p.sy);
+    if(calHandle){
+      state.dragging='cal-'+calHandle;
+      state.calHover=calHandle;
+      state.dragSnapshot=clone(state.calibration);
+      overlay.setPointerCapture(e.pointerId);
+      draw();
+      return;
+    }
+
+    if(state.mode==='calibrate'){
+      if(!state.calibrationDraft.length){
+        state.dragSnapshot=clone(state.calibration);
+        state.calibration=null;
+        state.calibrationDraft=[{x:p.x,y:p.y}];
+      } else {
+        const a=state.calibrationDraft[0], b={x:p.x,y:p.y};
+        const px=Math.hypot((b.x-a.x)*video.videoWidth,(b.y-a.y)*video.videoHeight);
+        if(px>0){
+          state.calibrationVisible=true;
+          state.calibration={
+            a,b,pixelLength:px,
+            realLength:Number($('calLength').value)||1,
+            unit:$('unitInput').value||'m'
+          };
+          pushAction({type:'calibration',before:state.dragSnapshot,after:clone(state.calibration)});
+          state.calibrationDraft=[];
+          state.dragSnapshot=null;
+          setMode('track');
+          return;
+        }
+      }
+      draw();
+      return;
+    }
+
+    if(state.mode!=='track') return;
+
+    const near=nearestPoint(p.sx,p.sy,14,true);
+
+    if(near>=0){
+      state.selectedIndex=near;
+      state.hoverIndex=near;
+      const targetFrame=state.points[near].frame;
+
+      if(targetFrame!==currentFrame()){
+        seekFrame(targetFrame);
+        draw();
+        return;
+      }
+
+      state.dragging='point';
+      state.dragSnapshot=clone(state.points);
+      overlay.setPointerCapture(e.pointerId);
+      draw();
+      return;
+    }
+
+    const before=clone(state.points);
+    const frame=currentFrame();
+    const existing=pointAtFrame(frame);
+    // t is the measured presentation time of the frame on screen. frame is kept
+    // as a display label and as the one-point-per-frame identity key.
+    const newPoint={frame,t:mediaTimeNow(),x:p.x,y:p.y};
+
+    if(existing>=0){
+      state.points[existing]=newPoint;
+      state.selectedIndex=existing;
+    }else{
+      state.points.push(newPoint);
+      state.points.sort((a,b)=>a.frame-b.frame);
+      state.selectedIndex=pointAtFrame(frame);
+    }
+
+    state.hoverIndex=state.selectedIndex;
+    pushAction({type:'points',before,after:clone(state.points)});
+    draw();
+
+    if(state.autoAdvance){
+      seekFrame(frame+state.stride);
+    }
+  });
+
+  overlay.addEventListener('pointermove',e=>{
+    const p=normFromEvent(e);
+
+    if(!state.dragging){
+      if(!insideVideoPoint(p)){
+        if(state.hoverIndex!==-1||state.calHover||state.rotHover){
+          state.hoverIndex=-1;state.calHover=null;state.rotHover=false;draw();
+        }
+        overlay.style.cursor='default';
+        return;
+      }
+
+      const geo=axisGeometry();
+      const near=nearestPoint(p.sx,p.sy,14,true);
+      const calHandle=calibrationHandleAt(p.sx,p.sy);
+      const overRotate=state.axesVisible &&
+        Math.hypot(p.sx-geo.rotate.x,p.sy-geo.rotate.y)<HANDLE_HIT_RADIUS;
+      const overOrigin=state.axesVisible &&
+        Math.hypot(p.sx-geo.origin.x,p.sy-geo.origin.y)<HANDLE_HIT_RADIUS;
+
+      if(near!==state.hoverIndex||calHandle!==state.calHover||overRotate!==state.rotHover){
+        state.hoverIndex=near;
+        state.calHover=calHandle;
+        state.rotHover=overRotate;
+        draw();
+      }
+
+      // All four drag targets report the same cursor now; the origin used to
+      // say 'move' while its siblings said 'grab'.
+      if(overRotate||overOrigin||calHandle) overlay.style.cursor='grab';
+      else if(near>=0) overlay.style.cursor=isCurrentFramePoint(near)?'grab':'pointer';
+      else overlay.style.cursor='crosshair';
+      return;
+    }
+
+    if(!insideVideoPoint(p)) return;
+
+    if(state.dragging==='origin'){
+      state.origin={x:p.x,y:p.y};
+      draw();
+      return;
+    }
+
+    if(state.dragging==='rotate'){
+      const o=screenFromNorm(state.origin);
+      let ang=Math.atan2(-(p.sy-o.y),p.sx-o.x);
+      if(!e.shiftKey){
+        const step=Math.PI/2;
+        const nearest=Math.round(ang/step)*step;
+        if(Math.abs(ang-nearest)<3*Math.PI/180) ang=nearest;
+      }
+      state.angle=ang;
+      draw();
+      return;
+    }
+
+    if(state.dragging==='cal-a'||state.dragging==='cal-b'){
+      if(moveCalibrationHandle(state.dragging.slice(4),p)) draw();
+      return;
+    }
+
+    if(state.dragging==='point' && state.selectedIndex>=0){
+      state.points[state.selectedIndex].x=p.x;
+      state.points[state.selectedIndex].y=p.y;
+      draw();
+    }
+  });
+
+  function finishPointerDrag(e){
+    if(state.dragging==='origin' && state.dragSnapshot){
+      const before=JSON.stringify(state.dragSnapshot);
+      const after=JSON.stringify(state.origin);
+      if(before!==after) pushAction({type:'origin',before:state.dragSnapshot,after:clone(state.origin)});
+    }else if(state.dragging==='rotate' && state.dragSnapshot!==null){
+      if(state.dragSnapshot!==state.angle){
+        pushAction({type:'angle',before:state.dragSnapshot,after:state.angle});
+      }
+    }else if((state.dragging==='cal-a'||state.dragging==='cal-b') && state.dragSnapshot){
+      if(JSON.stringify(state.dragSnapshot)!==JSON.stringify(state.calibration)){
+        pushAction({type:'calibration',before:state.dragSnapshot,after:clone(state.calibration)});
+      }
+    }else if(state.dragging==='point' && state.dragSnapshot){
+      const before=JSON.stringify(state.dragSnapshot);
+      const after=JSON.stringify(state.points);
+      if(before!==after){
+        pushAction({type:'points',before:state.dragSnapshot,after:clone(state.points)});
+      }
+    }
+
+    state.dragging=null;
+    state.dragSnapshot=null;
+    state.calHover=null;
+    state.rotHover=false;
+    try{overlay.releasePointerCapture(e.pointerId)}catch{}
+    draw();
+  }
+
+  overlay.addEventListener('pointerup',finishPointerDrag);
+  overlay.addEventListener('pointercancel',finishPointerDrag);
+  overlay.addEventListener('pointerleave',()=>{
+    if(!state.dragging){
+      state.hoverIndex=-1;
+      state.calHover=null;
+      state.rotHover=false;
+      overlay.style.cursor='crosshair';
+      draw();
+    }
+  });
+
+  // renderData and drawGraph used to run on every pointermove that changed the
+  // hover index, rebuilding the whole table dozens of times a second while
+  // dragging. Coalescing them onto one animation frame keeps the behaviour and
+  // removes the stall on long point lists.
+  let outputsQueued=false;
+  function scheduleOutputs(){
+    if(outputsQueued) return;
+    outputsQueued=true;
+    requestAnimationFrame(()=>{outputsQueued=false;renderData();drawGraph();});
+  }
+  function renderData(){
+    const rows=computed(), cf=currentFrame(), body=$('dataBody');
+    const unit=state.calibration?.unit||'px';
+    $('timeHeader').textContent='t (s)';
+    $('xHeader').textContent=`x (${unit})`;
+    $('yHeader').textContent=`y (${unit})`;
+    $('vxHeader').textContent=`vx (${unit}/s)`;
+    $('vyHeader').textContent=`vy (${unit}/s)`;
+    $('speedHeader').textContent=`speed (${unit}/s)`;
+    const selectedPoint=state.selectedIndex>=0?state.points[state.selectedIndex]:null;
+    const selectedFrame=selectedPoint?selectedPoint.frame:null;
+    const set=selectionSet();
+    body.innerHTML=rows.map(r=>`<tr class="${r.frame===cf?'current':''} ${r.frame===selectedFrame?'selected':''} ${set?(set.has(r.frame)?'in-selection':'excluded'):''}" data-frame="${r.frame}">
+      <td>${r.frame}</td><td>${r.t.toFixed(3)}</td><td>${r.x.toFixed(4)}</td><td>${r.y.toFixed(4)}</td><td>${r.vx.toFixed(4)}</td><td>${r.vy.toFixed(4)}</td><td>${r.speed.toFixed(4)}</td></tr>`).join('');
+    if(tableSelection.selectedColumns.size||(tableSelection.anchor&&tableSelection.focus)) paintTableSelection();
+  }
+
+  // ---- Curve fitting --------------------------------------------------
+  // Solves a small symmetric system by Gauss-Jordan with partial pivoting.
+  function solve(A,b){
+    const n=b.length;
+    const M=A.map((row,i)=>[...row,b[i]]);
+    for(let col=0;col<n;col++){
+      let best=col;
+      for(let r=col+1;r<n;r++) if(Math.abs(M[r][col])>Math.abs(M[best][col])) best=r;
+      if(Math.abs(M[best][col])<1e-12) return null;
+      [M[col],M[best]]=[M[best],M[col]];
+      const pivot=M[col][col];
+      for(let c=col;c<=n;c++) M[col][c]/=pivot;
+      for(let r=0;r<n;r++){
+        if(r===col) continue;
+        const factor=M[r][col];
+        if(!factor) continue;
+        for(let c=col;c<=n;c++) M[r][c]-=factor*M[col][c];
+      }
+    }
+    return M.map(row=>row[n]);
+  }
+
+  // Fits a polynomial in (x - xbar). Centering keeps the normal equations well
+  // conditioned; raw sums of x^4 go bad once x reaches the hundreds.
+  function polyFit(xs,ys,degree){
+    const n=xs.length;
+    if(n<degree+1) return null;
+    const xbar=xs.reduce((s,v)=>s+v,0)/n;
+    const dx=xs.map(v=>v-xbar);
+    const size=degree+1;
+    const A=[],b=[];
+    for(let i=0;i<size;i++){
+      const row=[];
+      for(let j=0;j<size;j++){
+        row.push(dx.reduce((s,v)=>s+Math.pow(v,i+j),0));
+      }
+      A.push(row);
+      b.push(dx.reduce((s,v,k)=>s+Math.pow(v,i)*ys[k],0));
+    }
+    const c=solve(A,b);
+    if(!c||c.some(v=>!Number.isFinite(v))) return null;
+    return {coeffs:c,xbar,fn:x=>c.reduce((s,v,i)=>s+v*Math.pow(x-xbar,i),0)};
+  }
+
+  // Sinusoid: seed from the data, then refine A, B, C, D by coordinate descent
+  // on the sum of squared residuals. phystracker never optimizes A and D, so a
+  // single outlier fixes its amplitude; this refines all four.
+  function sinFit(xs,ys){
+    const n=xs.length;
+    if(n<4) return null;
+    const ymin=Math.min(...ys), ymax=Math.max(...ys);
+    let D=(ymax+ymin)/2, A=(ymax-ymin)/2;
+    if(!(A>0)) return null;
+
+    const span=Math.max(...xs)-Math.min(...xs);
+    if(!(span>0)) return null;
+
+    // Seed frequency from mean zero-crossing spacing about the midline.
+    const crossings=[];
+    for(let i=1;i<n;i++){
+      const a=ys[i-1]-D, b2=ys[i]-D;
+      if(a===0||a*b2<0){
+        const t=a/(a-b2);
+        crossings.push(xs[i-1]+t*(xs[i]-xs[i-1]));
+      }
+    }
+    let period=crossings.length>=2
+      ? 2*(crossings[crossings.length-1]-crossings[0])/(crossings.length-1)
+      : span;
+    if(!(period>0)) period=span;
+    let B=2*Math.PI/period, C=0;
+
+    const sse=(A,B,C,D)=>{
+      let s=0;
+      for(let i=0;i<n;i++){
+        const r=ys[i]-(A*Math.sin(B*xs[i]+C)+D);
+        s+=r*r;
+      }
+      return s;
+    };
+
+    let best=sse(A,B,C,D);
+    // Coarse phase sweep first - phase is the parameter a local search most
+    // easily gets stuck on.
+    for(let p=-Math.PI;p<=Math.PI;p+=Math.PI/24){
+      const s=sse(A,B,p,D);
+      if(s<best){best=s;C=p;}
+    }
+    let steps={A:A*0.5,B:B*0.5,C:Math.PI/4,D:Math.max(1e-6,Math.abs(A)*0.5)};
+    for(let iter=0;iter<400;iter++){
+      let improved=false;
+      const params={A,B,C,D};
+      for(const key of ['A','B','C','D']){
+        for(const dir of [1,-1]){
+          const trial={...params,[key]:params[key]+dir*steps[key]};
+          if(key==='B'&&trial.B<=0) continue;
+          const s=sse(trial.A,trial.B,trial.C,trial.D);
+          if(s<best-1e-15){
+            best=s;A=trial.A;B=trial.B;C=trial.C;D=trial.D;
+            params[key]=trial[key];improved=true;break;
+          }
+        }
+      }
+      if(!improved){
+        let anyLeft=false;
+        for(const key of ['A','B','C','D']){
+          steps[key]/=2;
+          if(steps[key]>1e-9) anyLeft=true;
+        }
+        if(!anyLeft) break;
+      }
+    }
+    // Normalize to positive amplitude and a phase in (-pi, pi].
+    if(A<0){A=-A;C+=Math.PI;}
+    C=Math.atan2(Math.sin(C),Math.cos(C));
+    return {params:{A,B,C,D},fn:x=>A*Math.sin(B*x+C)+D};
+  }
+
+  function rSquared(xs,ys,fn){
+    const n=ys.length;
+    const mean=ys.reduce((s,v)=>s+v,0)/n;
+    let ssTot=0,ssRes=0;
+    for(let i=0;i<n;i++){
+      ssTot+=Math.pow(ys[i]-mean,2);
+      ssRes+=Math.pow(ys[i]-fn(xs[i]),2);
+    }
+    if(ssTot===0) return null;
+    return 1-ssRes/ssTot;
+  }
+
+  // Three significant figures throughout, which is the precision a hand-tracked
+  // point actually supports. Trailing zeros from toPrecision are trimmed so the
+  // equation reads cleanly.
+  function fmt(v){
+    if(!Number.isFinite(v)) return '—';
+    if(v===0) return '0';
+    const abs=Math.abs(v);
+    if(abs<1e-3||abs>=1e5){
+      return v.toExponential(2).replace('e','e');
+    }
+    let s=v.toPrecision(3);
+    if(s.includes('.')) s=s.replace(/\.?0+$/,'');
+    return s;
+  }
+
+  // Builds the fit for whatever is currently plotted and selected.
+  function fitModelFor(type){ return state.fitModels[type]||'none'; }
+  function currentFitModel(){ return fitModelFor($('graphSelect').value); }
+
+  function computeFit(xs,ys){
+    const model=currentFitModel();
+    if(model==='none'||xs.length<2) return null;
+    const need={linear:2,quadratic:3,sinusoidal:4}[model];
+    if(xs.length<need){
+      return {error:`Need at least ${need} selected points for a ${model} fit.`};
+    }
+
+    if(model==='sinusoidal'){
+      const f=sinFit(xs,ys);
+      if(!f) return {error:'Could not fit a sinusoid to these points.'};
+      const {A,B,C,D}=f.params;
+      const period=2*Math.PI/B;
+      return {
+        fn:f.fn,
+        equation:`y = ${fmt(A)}sin(${fmt(B)}x ${C>=0?'+':'−'} ${fmt(Math.abs(C))}) ${D>=0?'+':'−'} ${fmt(Math.abs(D))}`,
+        extra:`period ${fmt(period)}`,
+        r2:rSquared(xs,ys,f.fn)
+      };
+    }
+
+    const degree=model==='linear'?1:2;
+    const f=polyFit(xs,ys,degree);
+    if(!f) return {error:'Could not fit these points (they may be collinear in x).'};
+
+    // Re-expand the centered coefficients so the printed equation is in x.
+    const c=f.coeffs, xbar=f.xbar;
+    let equation,extra;
+    if(degree===1){
+      const m=c[1], b=c[0]-c[1]*xbar;
+      equation=`y = ${fmt(m)}x ${b>=0?'+':'−'} ${fmt(Math.abs(b))}`;
+      extra='';
+    }else{
+      const a2=c[2];
+      const a1=c[1]-2*c[2]*xbar;
+      const a0=c[0]-c[1]*xbar+c[2]*xbar*xbar;
+      equation=`y = ${fmt(a2)}x² ${a1>=0?'+':'−'} ${fmt(Math.abs(a1))}x ${a0>=0?'+':'−'} ${fmt(Math.abs(a0))}`;
+      extra='';
+    }
+    return {fn:f.fn,equation,extra,r2:rSquared(xs,ys,f.fn)};
+  }
+
+  // ---- Selection ------------------------------------------------------
+  function selectionSet(){
+    return state.selection ? new Set(state.selection) : null;
+  }
+  function isSelected(row,set){
+    return set===null || set.has(row.frame);
+  }
+  function selectionCount(){
+    return state.selection ? state.selection.length : 0;
+  }
+  function setSelection(frames){
+    const before=state.selection?[...state.selection]:null;
+    state.selection=(frames&&frames.length)?frames:null;
+    const after=state.selection?[...state.selection]:null;
+    if(JSON.stringify(before)!==JSON.stringify(after)){
+      pushAction({type:'selection',before,after});
+    }
+    updateSelectionBar();
+    scheduleOutputs();
+  }
+  function clearSelection(){ setSelection(null); }
+  // Points removed from the data should not linger in the selection.
+  function pruneSelection(){
+    if(!state.selection) return;
+    const live=new Set(state.points.map(p=>p.frame));
+    const kept=state.selection.filter(f=>live.has(f));
+    state.selection=kept.length?kept:null;
+    updateSelectionBar();
+  }
+  function updateFitPanel(fit,fitted,total){
+    const panel=$('fitPanel');
+    if(currentFitModel()==='none'||!fit){ panel.classList.add('hidden'); return; }
+    if(fit.error){
+      panel.innerHTML=`<div class="fit-warn">${fit.error}</div>`;
+      panel.classList.remove('hidden');
+      return;
+    }
+    const r2=fit.r2==null?'—':fit.r2.toFixed(4);
+    panel.innerHTML=
+      `<div class="fit-eq">${fit.equation}</div>`+
+      (fit.extra?`<div class="fit-meta">${fit.extra}</div>`:'')+
+      `<div class="fit-meta">R² = ${r2} &nbsp;·&nbsp; n = ${fitted} of ${total}</div>`;
+    panel.classList.remove('hidden');
+  }
+
+  function updateSelectionBar(){
+    const bar=$('selectionBar');
+    if(!state.selection){ bar.classList.add('hidden'); return; }
+    $('selectionCount').textContent=`${state.selection.length} of ${state.points.length} points selected`;
+    bar.classList.remove('hidden');
+  }
+
+  function autoLimits(xs,ys){
+    const fx=xs.filter(Number.isFinite), fy=ys.filter(Number.isFinite);
+    if(!fx.length||!fy.length) return {xmin:0,xmax:1,ymin:0,ymax:1};
+    xs=fx; ys=fy;
+    let xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);
+    let xspan=xmax-xmin, yspan=ymax-ymin;
+    const xmid=(xmin+xmax)/2, ymid=(ymin+ymax)/2;
+    if(xspan===0) xspan=Math.max(1,Math.abs(xmid)*0.2||1);
+    if(yspan===0) yspan=Math.max(1,Math.abs(ymid)*0.2||1);
+    return {
+      xmin:xmid-xspan*0.6,
+      xmax:xmid+xspan*0.6,
+      ymin:ymid-yspan*0.6,
+      ymax:ymid+yspan*0.6
+    };
+  }
+  function currentGraphData(){
+    const rows=computed();
+    const mode=$('graphSelect').value;
+    if(!rows.length)return null;
+    let xs,ys,h='t',v='y';
+    if(mode==='trajectory'){xs=rows.map(r=>r.x);ys=rows.map(r=>r.y);h='x';v='y';}
+    else {
+      xs=rows.map(r=>r.t);
+      ys=rows.map(r=>mode==='x'?r.x:mode==='y'?r.y:mode==='vx'?r.vx:mode==='vy'?r.vy:r.speed);
+      h='t';v=mode;
+    }
+    return {xs,ys,h,v};
+  }
+  function updateLimitLabels(){
+    const d=currentGraphData();
+    const h=d?d.h:'t', v=d?d.v:'y';
+    $('hScaleLabel').textContent=`${h} axis`;
+    $('vScaleLabel').textContent=`${v} axis`;
+  }
+  function populateLimitInputs(){
+    const r=state.graphLimits;
+    $('xMin').value=Number.isFinite(r.xmin)?Number(r.xmin.toPrecision(6)):'';
+    $('xMax').value=Number.isFinite(r.xmax)?Number(r.xmax.toPrecision(6)):'';
+    $('yMin').value=Number.isFinite(r.ymin)?Number(r.ymin.toPrecision(6)):'';
+    $('yMax').value=Number.isFinite(r.ymax)?Number(r.ymax.toPrecision(6)):'';
+  }
+  function autoscaleGraph(){
+    const d=currentGraphData();
+    if(!d)return;
+    state.graphLimits=autoLimits(d.xs,d.ys);
+    state.graphLimitsManual=false;
+    populateLimitInputs();
+    updateLimitLabels();
+    drawGraph();
+  }
+  function applyGraphLimits(){
+    const vals=['xMin','xMax','yMin','yMax'].map(id=>{
+      const s=$(id).value.trim();
+      return s===''?NaN:Number(s);
+    });
+    const [xmin,xmax,ymin,ymax]=vals;
+    const valid=vals.every(Number.isFinite)&&xmin<xmax&&ymin<ymax;
+    ['xMin','xMax','yMin','yMax'].forEach(id=>$(id).classList.remove('invalid'));
+    if(!valid){
+      ['xMin','xMax','yMin','yMax'].forEach(id=>$(id).classList.add('invalid'));
+      return;
+    }
+    state.graphLimits={xmin,xmax,ymin,ymax};
+    state.graphLimitsManual=true;
+    drawGraph();
+  }
+
+  function drawGraph(){
+    const rows=computed(), type=$('graphSelect').value;
+    const set=selectionSet();
+    const flags=rows.map(r=>isSelected(r,set));
+    const highlight=tableSelectedFrames();
+    const highlighted=rows.map(r=>highlight?highlight.has(r.frame):false);
+    plottedRows=rows;
+    const Wcss=graph.clientWidth,Hcss=graph.clientHeight;
+    gctx.clearRect(0,0,Wcss,Hcss);
+    gctx.fillStyle='#f8fafc';
+    gctx.fillRect(0,0,Wcss,Hcss);
+    if(rows.length===0){
+      gctx.fillStyle='#475569';
+      gctx.font='600 20px system-ui, -apple-system, Segoe UI, sans-serif';
+      gctx.textAlign='center';
+      gctx.textBaseline='middle';
+      gctx.fillText('Add a tracked point.',Wcss/2,Hcss/2);
+      lastPlot=null;
+      return;
+    }
+
+    let xs,ys,xlab,ylab,title,color,pointColor;
+    const unit=state.calibration?.unit||'px';
+
+    if(type==='trajectory'){
+      xs=rows.map(r=>r.x);ys=rows.map(r=>r.y);
+      xlab=`x (${unit})`;ylab=`y (${unit})`;
+      title='y vs x';
+      color='#64748b';
+      pointColor='#38bdf8';
+    }else{
+      xs=rows.map(r=>r.t);
+      ys=rows.map(r=>r[type]);
+      xlab='t (s)';
+      ylab=type+(type.startsWith('v')||type==='speed'?` (${unit}/s)`:` (${unit})`);
+      title=`${type} vs t`;
+
+      if(type==='x'||type==='vx'){
+        color='#38bdf8';
+      }else if(type==='y'||type==='vy'){
+        color='#22c55e';
+      }else{
+        color='#c084fc';
+      }
+      pointColor=color;
+    }
+
+    // Fit only what is selected; with no selection that is every point.
+    const fitXs=[],fitYs=[];
+    xs.forEach((x,i)=>{
+      if(flags[i]&&Number.isFinite(x)&&Number.isFinite(ys[i])){fitXs.push(x);fitYs.push(ys[i]);}
+    });
+    const fit=computeFit(fitXs,fitYs);
+    updateFitPanel(fit,fitXs.length,rows.length);
+
+    plot(xs,ys,xlab,ylab,{title,color,pointColor},flags,highlighted,fit);
+  }
+
+  function niceNumber(value,round){
+    if(!Number.isFinite(value) || value<=0)return 1;
+    const exponent=Math.floor(Math.log10(value));
+    const fraction=value/Math.pow(10,exponent);
+    let niceFraction;
+    if(round){
+      if(fraction<1.5)niceFraction=1;
+      else if(fraction<3)niceFraction=2;
+      else if(fraction<7)niceFraction=5;
+      else niceFraction=10;
+    }else{
+      if(fraction<=1)niceFraction=1;
+      else if(fraction<=2)niceFraction=2;
+      else if(fraction<=5)niceFraction=5;
+      else niceFraction=10;
+    }
+    return niceFraction*Math.pow(10,exponent);
+  }
+
+  function niceTicks(min,max,targetCount=6){
+    if(!Number.isFinite(min)||!Number.isFinite(max)||min===max){
+      return {min:min||0,max:(max||0)+1,step:1,values:[min||0,(max||0)+1]};
+    }
+    const span=max-min;
+    const step=niceNumber(span/Math.max(2,targetCount-1),true);
+    const niceMin=Math.floor(min/step)*step;
+    const niceMax=Math.ceil(max/step)*step;
+    const values=[];
+    const count=Math.round((niceMax-niceMin)/step);
+    for(let i=0;i<=count;i++)values.push(niceMin+i*step);
+    return {min:niceMin,max:niceMax,step,values};
+  }
+
+  function tickDecimals(step){
+    if(!Number.isFinite(step)||step===0)return 2;
+    // Derive the precision from the step's own decimal representation. The old
+    // log10 form dropped a digit for steps like 0.25, printing 0, 0.3, 0.5.
+    const [mantissa,exponent]=Math.abs(step).toExponential(6).split('e');
+    const mantissaDecimals=(mantissa.split('.')[1]||'').replace(/0+$/,'').length;
+    return Math.max(0,Math.min(10,mantissaDecimals-Number(exponent)));
+  }
+
+  // The margins below reserve 116px horizontally and 102px vertically before
+  // any data is drawn. Past that the plot area goes negative and py() inverts
+  // the y-axis, so bail out with a message rather than draw it upside down.
+  // The splitter cannot reach this state, but shrinking the window can.
+  const MIN_PLOT_W=70, MIN_PLOT_H=60;
+  // Set by plot(); the brush needs the same pixel mapping the renderer used.
+  let lastPlot=null;
+  // Row order as last plotted, so a brush hit maps back to the right frames.
+  let plottedRows=[];
+  function plot(xs,ys,xlab,ylab,style,flags,highlighted,fit){
+    const W=graph.clientWidth,H=graph.clientHeight,m={l:88,r:28,t:30,b:72};
+    if(W-m.l-m.r<MIN_PLOT_W || H-m.t-m.b<MIN_PLOT_H){
+      gctx.fillStyle='#64748b';
+      gctx.font='600 14px system-ui, -apple-system, Segoe UI, sans-serif';
+      gctx.textAlign='center';gctx.textBaseline='middle';
+      gctx.fillText('Graph area too small.',W/2,H/2);
+      return;
+    }
+    let xmin=state.graphLimits.xmin, xmax=state.graphLimits.xmax;
+    let ymin=state.graphLimits.ymin, ymax=state.graphLimits.ymax;
+    const valid=[xmin,xmax,ymin,ymax].every(Number.isFinite) && xmin<xmax && ymin<ymax;
+    if(!valid){
+      // Scale to the selected points when there is a selection, so choosing a
+      // region also zooms to it.
+      const anySelected=flags&&flags.some(Boolean);
+      const sx=anySelected?xs.filter((_,i)=>flags[i]):xs;
+      const sy=anySelected?ys.filter((_,i)=>flags[i]):ys;
+      const limits=autoLimits(sx,sy);
+      xmin=limits.xmin; xmax=limits.xmax; ymin=limits.ymin; ymax=limits.ymax;
+      state.graphLimits=limits;
+      state.graphLimitsManual=false;
+      populateLimitInputs();
+    }
+
+    const xTicks=niceTicks(xmin,xmax,6);
+    const yTicks=niceTicks(ymin,ymax,6);
+
+    // For autoscaled graphs, expand the plotted bounds to the nice tick bounds.
+    // Preserve exact user-entered manual bounds.
+    if(!state.graphLimitsManual){
+      xmin=xTicks.min; xmax=xTicks.max;
+      ymin=yTicks.min; ymax=yTicks.max;
+      state.graphLimits={xmin,xmax,ymin,ymax};
+      populateLimitInputs();
+    }
+
+    const px=x=>m.l+(x-xmin)/(xmax-xmin)*(W-m.l-m.r);
+    const py=y=>H-m.b-(y-ymin)/(ymax-ymin)*(H-m.t-m.b);
+
+    // Minor gridlines at half-step intervals.
+    gctx.strokeStyle='#edf0f4';
+    gctx.lineWidth=1;
+    // Repeatedly adding a fractional step accumulated rounding error, which
+    // dropped or doubled the last gridline; index the steps instead. The count
+    // guard also stops a pathological range from locking the canvas up.
+    const minorLines=(min,max,step)=>{
+      if(!Number.isFinite(step)||step<=0) return [];
+      const first=Math.ceil(min/step);
+      const count=Math.floor(max/step)-first;
+      if(!Number.isFinite(count)||count<0||count>500) return [];
+      return Array.from({length:count+1},(_,i)=>(first+i)*step);
+    };
+    minorLines(xmin,xmax,xTicks.step/2).forEach(v=>{
+      const x=px(v);
+      gctx.beginPath();gctx.moveTo(x,m.t);gctx.lineTo(x,H-m.b);gctx.stroke();
+    });
+    minorLines(ymin,ymax,yTicks.step/2).forEach(v=>{
+      const y=py(v);
+      gctx.beginPath();gctx.moveTo(m.l,y);gctx.lineTo(W-m.r,y);gctx.stroke();
+    });
+
+    // Major gridlines at nice-number intervals.
+    gctx.strokeStyle='#d3d8df';
+    gctx.lineWidth=1.35;
+    xTicks.values.forEach(v=>{
+      if(v<xmin-1e-12||v>xmax+1e-12)return;
+      const x=px(v);
+      gctx.beginPath();gctx.moveTo(x,m.t);gctx.lineTo(x,H-m.b);gctx.stroke();
+    });
+    yTicks.values.forEach(v=>{
+      if(v<ymin-1e-12||v>ymax+1e-12)return;
+      const y=py(v);
+      gctx.beginPath();gctx.moveTo(m.l,y);gctx.lineTo(W-m.r,y);gctx.stroke();
+    });
+
+    // Axes
+    gctx.strokeStyle='#1f2937';
+    gctx.lineWidth=2.25;
+    gctx.beginPath();
+    gctx.moveTo(m.l,m.t);
+    gctx.lineTo(m.l,H-m.b);
+    gctx.lineTo(W-m.r,H-m.b);
+    gctx.stroke();
+
+    // Data
+    gctx.strokeStyle=style.color;
+    gctx.fillStyle=style.pointColor||style.color;
+    gctx.lineWidth=3.25;
+    gctx.lineJoin='round';
+    gctx.lineCap='round';
+    const active=flags||xs.map(()=>true);
+
+    // Points only - no connecting line. Joining measurements implies a model of
+    // what happens between them, which is the student's job to propose.
+    xs.forEach((x,i)=>{
+      if(!Number.isFinite(ys[i])) return;
+      gctx.save();
+      if(!active[i]) gctx.globalAlpha=0.25;
+      gctx.beginPath();
+      gctx.arc(px(x),py(ys[i]),active[i]?4.75:3.5,0,Math.PI*2);
+      gctx.fill();
+      gctx.restore();
+    });
+
+    // Rows highlighted in the data table get an amber ring, so a spreadsheet
+    // selection and the plot point at the same reading are visibly the same
+    // thing. Drawn last so it sits above the series.
+    if(highlighted&&highlighted.some(Boolean)){
+      gctx.save();
+      gctx.strokeStyle='#f59e0b';
+      gctx.lineWidth=2.5;
+      xs.forEach((x,i)=>{
+        if(!highlighted[i]) return;
+        gctx.beginPath();
+        gctx.arc(px(x),py(ys[i]),8,0,Math.PI*2);
+        gctx.stroke();
+      });
+      gctx.restore();
+    }
+
+    // The fit curve spans the whole plot, not just the fitted points, so it is
+    // obvious where the model stops describing the data.
+    if(fit&&fit.fn){
+      gctx.save();
+      gctx.strokeStyle='#f59e0b';
+      gctx.lineWidth=2.5;
+      gctx.setLineDash([7,5]);
+      gctx.beginPath();
+      const steps=220;
+      let started=false;
+      for(let i=0;i<=steps;i++){
+        const x=xmin+(xmax-xmin)*i/steps;
+        const y=fit.fn(x);
+        if(!Number.isFinite(y)){started=false;continue;}
+        const X=px(x),Y=py(y);
+        // Clip vertically rather than letting a steep model shoot off-canvas.
+        if(Y<m.t-500||Y>H-m.b+500){started=false;continue;}
+        if(!started){gctx.moveTo(X,Y);started=true;}else gctx.lineTo(X,Y);
+      }
+      gctx.stroke();
+      gctx.restore();
+    }
+
+    // Expose the mapping so the brush can convert pixels back to data.
+    lastPlot={px,py,xmin,xmax,ymin,ymax,m,W,H};
+
+    // Graph title
+    gctx.fillStyle=style.color;
+    gctx.font='700 20px system-ui, -apple-system, Segoe UI, sans-serif';
+    gctx.textAlign='center';
+    gctx.textBaseline='top';
+    gctx.fillText(style.title,(m.l+W-m.r)/2,5);
+
+    // Axis labels
+    gctx.fillStyle='#111827';
+    gctx.font='600 19px system-ui, -apple-system, Segoe UI, sans-serif';
+    gctx.textAlign='center';
+    gctx.textBaseline='alphabetic';
+    gctx.fillStyle=(style.title==='y vs x')?'#38bdf8':style.color;
+    gctx.fillText(xlab,(m.l+W-m.r)/2,H-18);
+
+    gctx.save();
+    gctx.fillStyle=(style.title==='y vs x')?'#22c55e':style.color;
+    gctx.translate(24,(m.t+H-m.b)/2);
+    gctx.rotate(-Math.PI/2);
+    gctx.fillText(ylab,0,0);
+    gctx.restore();
+
+    // Tick labels with scale-appropriate decimals.
+    const xDec=tickDecimals(xTicks.step);
+    const yDec=tickDecimals(yTicks.step);
+
+    gctx.font='600 14px system-ui, -apple-system, Segoe UI, sans-serif';
+    gctx.fillStyle='#273244';
+    gctx.textAlign='center';
+    gctx.textBaseline='top';
+    xTicks.values.forEach(v=>{
+      if(v<xmin-1e-12||v>xmax+1e-12)return;
+      const label=Math.abs(v)<1e-12?0:v;
+      gctx.fillText(label.toFixed(xDec),px(v),H-m.b+10);
+    });
+
+    gctx.textAlign='right';
+    gctx.textBaseline='middle';
+    yTicks.values.forEach(v=>{
+      if(v<ymin-1e-12||v>ymax+1e-12)return;
+      const label=Math.abs(v)<1e-12?0:v;
+      gctx.fillText(label.toFixed(yDec),m.l-11,py(v));
+    });
+  }
+
+  function saveProject(){
+    const payload={format:'Manual Video Analysis Project',version:1,video:{name:state.videoName,size:state.videoSize,duration:state.videoDuration,width:video.videoWidth||null,height:video.videoHeight||null},fps:state.fps,stride:state.stride,calibration:state.calibration,calibrationVisible:state.calibrationVisible,origin:state.origin,angle:state.angle,axesVisible:state.axesVisible,points:state.points,selection:state.selection,fitModels:state.fitModels,pointDisplay:state.pointDisplay,recentCount:state.recentCount,autoAdvance:state.autoAdvance,timeOrigin:state.timeOrigin,graphLimits:state.graphLimits,graphLimitsManual:state.graphLimitsManual};
+    download(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),(state.videoName.replace(/\.[^.]+$/,'')||'video-analysis')+'.mva');
+  }
+  function loadProject(file){
+    const fr=new FileReader();
+    fr.onload=()=>{try{
+      const p=JSON.parse(fr.result);
+      state.fps=p.fps||30;state.stride=p.stride||1;state.calibration=p.calibration||null;state.calibrationVisible=p.calibrationVisible!==false;state.origin=p.origin||state.origin;state.angle=p.angle||0;state.axesVisible=p.axesVisible!==false;state.points=p.points||[];state.selection=Array.isArray(p.selection)&&p.selection.length?p.selection:null;state.fitModels=(p.fitModels&&typeof p.fitModels==='object')?p.fitModels:(p.fitModel&&p.fitModel!=='none'?{y:p.fitModel}:{});state.pointDisplay=p.pointDisplay||'recent';state.recentCount=p.recentCount||5;state.autoAdvance=p.autoAdvance!==false;state.timeOrigin=p.timeOrigin||'first';state.graphLimits=p.graphLimits||state.graphLimits;state.graphLimitsManual=Boolean(p.graphLimitsManual);
+      fpsWasUserSet=true;
+      $('fpsInput').value=state.fps;$('strideInput').value=state.stride;$('pointDisplay').value=state.pointDisplay;$('autoAdvance').value=state.autoAdvance?'1':'0';$('timeOrigin').value=state.timeOrigin;populateLimitInputs();updateLimitLabels();
+      // The calibration fields showed stale values after a load, and editing one
+      // then silently rewrote a calibration the student had not touched.
+      syncCalibrationInputs();
+      pruneSelection();
+      updateSelectionBar();
+      $('fitSelect').value=currentFitModel();
+      state.expectedVideo=p.video||null;
+      draw();
+      alert(p.video?.name?`Project loaded. Select the original video file: ${p.video.name}`:'Project loaded. Select its video file.');
+    }catch(e){alert('Could not open project file.');}};
+    fr.readAsText(file);
+  }
+
+
+  // Repainting the graph from a table drag would run on every pointermove;
+  // coalesce onto an animation frame like the other outputs.
+  let highlightQueued=false;
+  function scheduleGraphHighlight(){
+    if(highlightQueued) return;
+    highlightQueued=true;
+    requestAnimationFrame(()=>{highlightQueued=false;drawGraph();});
+  }
+
+  const tableSelection={
+    active:false,
+    anchor:null,
+    focus:null,
+    selectedColumns:new Set(),
+    lastHeaderColumn:null,
+    suppressNextClick:false
+  };
+
+  function tableCellPosition(cell){
+    const row=cell.parentElement;
+    const section=row.parentElement.tagName.toLowerCase();
+    const rowIndex=Array.from(row.parentElement.children).indexOf(row);
+    return {
+      row:section==='thead'?0:rowIndex+1,
+      col:Array.from(row.children).indexOf(cell)
+    };
+  }
+
+  // Which data rows the spreadsheet selection currently covers. Returned as a
+  // Set of frames so the graph can highlight exactly those points.
+  function tableSelectedFrames(){
+    const bodyRows=$('dataBody').rows;
+    if(!bodyRows.length) return null;
+    const frameOf=i=>{
+      const tr=bodyRows[i];
+      return tr&&tr.dataset.frame!==undefined?Number(tr.dataset.frame):null;
+    };
+    // A whole-column selection covers every row, which is the same as no
+    // highlight at all - so treat it as nothing rather than lighting up all.
+    if(tableSelection.selectedColumns.size) return null;
+    if(!tableSelection.anchor||!tableSelection.focus) return null;
+    const r1=Math.min(tableSelection.anchor.row,tableSelection.focus.row);
+    const r2=Math.max(tableSelection.anchor.row,tableSelection.focus.row);
+    const frames=new Set();
+    for(let r=r1;r<=r2;r++){
+      // Row 0 is the header; body rows start at 1.
+      if(r===0) continue;
+      const f=frameOf(r-1);
+      if(f!==null) frames.add(f);
+    }
+    return frames.size?frames:null;
+  }
+
+  function tableCellAt(row,col){
+    const table=$('dataTab').querySelector('table');
+    return row===0
+      ? table.tHead?.rows[0]?.cells[col]||null
+      : table.tBodies[0]?.rows[row-1]?.cells[col]||null;
+  }
+
+  function clearTableSelection(){
+    $('dataTab').querySelectorAll('.cell-selected,.selection-anchor').forEach(cell=>{
+      cell.classList.remove('cell-selected','selection-anchor');
+    });
+  }
+
+  function paintTableSelection(){
+    clearTableSelection();
+    // Keep the graph's highlight in step with the spreadsheet selection.
+    scheduleGraphHighlight();
+    const table=$('dataTab').querySelector('table');
+
+    if(tableSelection.selectedColumns.size){
+      const lastRow=table.tBodies[0].rows.length;
+      [...tableSelection.selectedColumns].forEach(col=>{
+        for(let row=0;row<=lastRow;row++){
+          const cell=tableCellAt(row,col);
+          if(cell)cell.classList.add('cell-selected');
+        }
+      });
+      if(tableSelection.lastHeaderColumn!==null){
+        const anchor=tableCellAt(0,tableSelection.lastHeaderColumn);
+        if(anchor)anchor.classList.add('selection-anchor');
+      }
+      return;
+    }
+
+    if(!tableSelection.anchor||!tableSelection.focus)return;
+    const r1=Math.min(tableSelection.anchor.row,tableSelection.focus.row);
+    const r2=Math.max(tableSelection.anchor.row,tableSelection.focus.row);
+    const c1=Math.min(tableSelection.anchor.col,tableSelection.focus.col);
+    const c2=Math.max(tableSelection.anchor.col,tableSelection.focus.col);
+
+    for(let r=r1;r<=r2;r++){
+      for(let c=c1;c<=c2;c++){
+        const cell=tableCellAt(r,c);
+        if(cell)cell.classList.add('cell-selected');
+      }
+    }
+    const anchor=tableCellAt(tableSelection.anchor.row,tableSelection.anchor.col);
+    if(anchor)anchor.classList.add('selection-anchor');
+  }
+
+  function selectedTableText(){
+    const table=$('dataTab').querySelector('table');
+
+    if(tableSelection.selectedColumns.size){
+      const columns=[...tableSelection.selectedColumns].sort((a,b)=>a-b);
+      const lastRow=table.tBodies[0].rows.length;
+      const lines=[];
+      for(let row=0;row<=lastRow;row++){
+        lines.push(columns.map(col=>{
+          const cell=tableCellAt(row,col);
+          return cell?cell.textContent.trim():'';
+        }).join('\t'));
+      }
+      return lines.join('\n');
+    }
+
+    if(!tableSelection.anchor||!tableSelection.focus)return '';
+    const r1=Math.min(tableSelection.anchor.row,tableSelection.focus.row);
+    const r2=Math.max(tableSelection.anchor.row,tableSelection.focus.row);
+    const c1=Math.min(tableSelection.anchor.col,tableSelection.focus.col);
+    const c2=Math.max(tableSelection.anchor.col,tableSelection.focus.col);
+
+    const lines=[];
+    for(let r=r1;r<=r2;r++){
+      const values=[];
+      for(let c=c1;c<=c2;c++){
+        const cell=tableCellAt(r,c);
+        values.push(cell?cell.textContent.trim():'');
+      }
+      lines.push(values.join('\t'));
+    }
+    return lines.join('\n');
+  }
+
+  function copySelectedTableCells(event){
+    const text=selectedTableText();
+    if(!text)return false;
+
+    if(event&&event.clipboardData){
+      event.preventDefault();
+      event.clipboardData.setData('text/plain',text);
+      $('copyStatus').textContent='Copied selection';
+      setTimeout(()=>{$('copyStatus').textContent='';},1600);
+      return true;
+    }
+    writeClipboardText(text,'Copied selection');
+    return true;
+  }
+
+  function selectColumn(col,event){
+    const additive=event.ctrlKey||event.metaKey;
+    const extending=event.shiftKey&&tableSelection.lastHeaderColumn!==null;
+
+    tableSelection.anchor=null;
+    tableSelection.focus=null;
+
+    if(extending){
+      if(!additive)tableSelection.selectedColumns.clear();
+      const first=Math.min(tableSelection.lastHeaderColumn,col);
+      const last=Math.max(tableSelection.lastHeaderColumn,col);
+      for(let c=first;c<=last;c++)tableSelection.selectedColumns.add(c);
+    }else if(additive){
+      if(tableSelection.selectedColumns.has(col)){
+        tableSelection.selectedColumns.delete(col);
+      }else{
+        tableSelection.selectedColumns.add(col);
+      }
+      tableSelection.lastHeaderColumn=col;
+    }else{
+      tableSelection.selectedColumns.clear();
+      tableSelection.selectedColumns.add(col);
+      tableSelection.lastHeaderColumn=col;
+    }
+    paintTableSelection();
+  }
+
+  function setupTableSelection(){
+    const table=$('dataTab').querySelector('table');
+
+    table.addEventListener('mousedown',event=>{
+      const cell=event.target.closest('th,td');
+      if(!cell)return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      const pos=tableCellPosition(cell);
+
+      if(cell.tagName==='TH'){
+        selectColumn(pos.col,event);
+        tableSelection.active=false;
+        tableSelection.suppressNextClick=true;
+        return;
+      }
+
+      tableSelection.selectedColumns.clear();
+      tableSelection.lastHeaderColumn=null;
+      tableSelection.anchor=pos;
+      tableSelection.focus=pos;
+      tableSelection.active=true;
+      tableSelection.suppressNextClick=true;
+      paintTableSelection();
+    });
+
+    table.addEventListener('mouseover',event=>{
+      if(!tableSelection.active)return;
+      const cell=event.target.closest('td');
+      if(!cell)return;
+      tableSelection.focus=tableCellPosition(cell);
+      paintTableSelection();
+    });
+
+    table.addEventListener('click',event=>{
+      if(tableSelection.suppressNextClick){
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        tableSelection.suppressNextClick=false;
+      }
+    },true);
+
+    document.addEventListener('mouseup',()=>{
+      tableSelection.active=false;
+    });
+
+    document.addEventListener('copy',event=>{
+      if(
+        tableSelection.selectedColumns.size||
+        (tableSelection.anchor&&tableSelection.focus)
+      ){
+        copySelectedTableCells(event);
+      }
+    });
+
+    document.addEventListener('keydown',event=>{
+      if(event.key==='Escape'){
+        tableSelection.anchor=null;
+        tableSelection.focus=null;
+        tableSelection.selectedColumns.clear();
+        tableSelection.lastHeaderColumn=null;
+        clearTableSelection();
+      }
+    });
+  }
+
+  function tableDataAsTSV(){
+    const rows=computed();
+    const unit=state.calibration?.unit||'px';
+    const header=[
+      'Frame',
+      't (s)',
+      `x (${unit})`,
+      `y (${unit})`,
+      `vx (${unit}/s)`,
+      `vy (${unit}/s)`,
+      `speed (${unit}/s)`
+    ];
+    const lines=[header.join('\t')];
+    rows.forEach(r=>{
+      lines.push([
+        r.frame,
+        r.t.toFixed(6),
+        r.x.toFixed(6),
+        r.y.toFixed(6),
+        r.vx.toFixed(6),
+        r.vy.toFixed(6),
+        r.speed.toFixed(6)
+      ].join('\t'));
+    });
+    return lines.join('\n');
+  }
+
+  async function writeClipboardText(text,successMessage='Copied'){
+    const status=$('copyStatus');
+    try{
+      if(navigator.clipboard && window.isSecureContext){
+        await navigator.clipboard.writeText(text);
+      }else{
+        const area=document.createElement('textarea');
+        area.value=text;
+        area.setAttribute('readonly','');
+        area.style.position='fixed';
+        area.style.opacity='0';
+        area.style.pointerEvents='none';
+        area.style.left='0';
+        area.style.top='0';
+        document.body.appendChild(area);
+        area.focus();
+        area.select();
+        area.setSelectionRange(0,area.value.length);
+        const ok=document.execCommand('copy');
+        area.remove();
+        if(!ok) throw new Error('Copy command failed');
+      }
+      status.textContent=successMessage;
+      setTimeout(()=>{status.textContent='';},1800);
+      return true;
+    }catch(error){
+      status.textContent='Copy failed';
+      alert('The browser blocked clipboard access. Select the highlighted cells and use Ctrl/Cmd+C, or use Export CSV.');
+      return false;
+    }
+  }
+
+  async function copyDataToClipboard(){
+    await writeClipboardText(tableDataAsTSV(),'Copied full table');
+  }
+
+
+  // The unit string is free text. A unit containing a comma or quote used to
+  // split the header row and shift every column in the exported file.
+  function csvCell(value){
+    const text=String(value);
+    return /[",\n]/.test(text)?`"${text.replace(/"/g,'""')}"`:text;
+  }
+  function exportCSV(){
+    const rows=computed(),u=state.calibration?.unit||'px';
+    const lines=[[`frame`,`time_s`,`x_${u}`,`y_${u}`,`vx_${u}_per_s`,`vy_${u}_per_s`,`speed_${u}_per_s`],...rows.map(r=>[r.frame,r.t,r.x,r.y,r.vx,r.vy,r.speed])];
+    download(new Blob([lines.map(r=>r.map(csvCell).join(',')).join('\n')],{type:'text/csv'}),'video-analysis.csv');
+  }
+  function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+
+  // Points are stored as fractions of the frame, so a video of different
+  // dimensions or length reinterprets every coordinate. Warn instead of
+  // silently producing wrong numbers.
+  function warnOnVideoMismatch(){
+    const expected=state.expectedVideo;
+    if(!expected) return;
+    state.expectedVideo=null;
+    const sizeChanged=Number.isFinite(expected.width)&&Number.isFinite(expected.height)&&
+      (expected.width!==video.videoWidth||expected.height!==video.videoHeight);
+    const durationChanged=Number.isFinite(expected.duration)&&
+      Math.abs(expected.duration-video.duration)>0.5;
+    if(sizeChanged||durationChanged){
+      alert(`This video does not match the one saved with the project${expected.name?` (${expected.name})`:''}. Tracked points may not line up with the footage.`);
+    }
+  }
+
+  let currentVideoUrl=null;
+  $('videoInput').addEventListener('change',e=>{
+    const f=e.target.files[0];if(!f)return;
+    // Each load created a blob URL that was never released, pinning the
+    // previous file in memory for the life of the page.
+    if(currentVideoUrl) URL.revokeObjectURL(currentVideoUrl);
+    detectionRan=false;fpsWasUserSet=false;
+    state.videoName=f.name;state.videoSize=f.size;
+    currentVideoUrl=URL.createObjectURL(f);
+    video.src=currentVideoUrl;
+    video.onloadedmetadata=()=>{
+      state.videoDuration=video.duration;
+      warnOnVideoMismatch();
+      seekFrame(0);resizeOverlay();updateUI();
+    };
+  });
+  let playbackAnimationId=null;
+
+  // Single implementation of the frame/time/HUD readout. It used to exist twice,
+  // in updateUI and here, and the two copies had already begun to drift apart.
+  function updatePlaybackIndicators(){
+    const lf=lastFrame(), cf=currentFrame();
+    $('frameLabel').textContent=`Frame ${cf} / ${lf}`;
+    $('timeLabel').textContent=`${mediaTimeNow().toFixed(3)} s`;
+    $('timelineRange').max=lf;
+    $('timelineRange').value=cf;
+
+    if(video.videoWidth){
+      const calibrating=state.mode==='calibrate';
+      const modeLabel=calibrating?'CALIBRATION':'TRACK MODE';
+      $('hud').innerHTML=`<strong style="color:${calibrating?'#c084fc':'#38bdf8'}">${modeLabel}</strong><br>Frame: ${cf} / ${lf}<br>Time: ${mediaTimeNow().toFixed(3)} s<br>Points: ${state.points.length}`;
+    }else{
+      $('hud').textContent='Load a video to begin.';
+    }
+  }
+
+  function animatePlayback(){
+    updatePlaybackIndicators();
+    if(!video.paused && !video.ended){
+      playbackAnimationId=requestAnimationFrame(animatePlayback);
+    }else{
+      playbackAnimationId=null;
+    }
+  }
+
+  video.addEventListener('timeupdate',updatePlaybackIndicators);
+  video.addEventListener('seeked',()=>{resetFpsSample();updatePlaybackIndicators();draw();});
+  video.addEventListener('seeking',()=>{
+    // The frame on screen is about to change; the old timestamp no longer
+    // describes it. Clearing here means mediaTimeNow falls back to currentTime
+    // until a real frame callback arrives with the new value.
+    presentedTime=null;
+    resetFpsSample();
+  });
+  video.addEventListener('loadedmetadata',()=>{
+    presentedTime=null;presentedFrames=null;measuredFps=null;pumpActive=false;
+    resetFpsSample();updateFpsHint();pumpFrameCallback();
+    detectFrameRate();
+  });
+  video.addEventListener('play',()=>{
+    $('playBtn').textContent='❚❚';
+    $('playBtn').title='Pause';
+    $('playBtn').classList.add('active');
+    if(playbackAnimationId===null) playbackAnimationId=requestAnimationFrame(animatePlayback);
+  });
+  video.addEventListener('pause',()=>{
+    $('playBtn').textContent='▶';
+    $('playBtn').title='Play';
+    $('playBtn').classList.remove('active');
+    updatePlaybackIndicators();
+  });
+  video.addEventListener('ended',updatePlaybackIndicators);
+  $('playBtn').onclick=()=>video.paused?video.play():video.pause();
+  $('prevBtn').onclick=()=>seekFrame(currentFrame()-state.stride);
+  $('nextBtn').onclick=()=>seekFrame(currentFrame()+state.stride);
+  $('fpsInput').onchange=e=>{fpsWasUserSet=true;applyFps(Number(e.target.value));};
+  $('fpsHint').onclick=()=>{ if(measuredFps!=null) applyFps(Math.round(measuredFps*100)/100); };
+  $('strideInput').onchange=e=>{
+    state.stride=Math.min(99,Math.max(1,Math.round(Number(e.target.value)||1)));
+    e.target.value=state.stride;
+  };
+  $('timelineRange').oninput=e=>seekFrame(Number(e.target.value));
+  $('calibrateBtn').onclick=()=>{
+    if(state.calibration){
+      state.calibrationVisible=!state.calibrationVisible;
+      draw();
+    }else{
+      state.calibrationDraft=[];
+      state.calibrationVisible=true;
+      setMode('calibrate');
+    }
+  };
+  $('calibrateBtn').ondblclick=()=>{
+    state.calibrationDraft=[];
+    state.calibrationVisible=true;
+    setMode('calibrate');
+  };
+  function syncCalibrationInputs(){
+    if(!state.calibration) return;
+    $('calLength').value=state.calibration.realLength;
+    $('unitInput').value=state.calibration.unit;
+  }
+  // The length and unit were only read at the instant of the second calibration
+  // click. Editing either field afterwards changed the label but left every
+  // computed value on the old scale.
+  function updateCalibrationFromInputs(){
+    if(!state.calibration){ return; }
+    const length=Number($('calLength').value);
+    if(Number.isFinite(length)&&length>0){
+      state.calibration.realLength=length;
+      $('calLength').classList.remove('invalid');
+    }else{
+      $('calLength').classList.add('invalid');
+    }
+    state.calibration.unit=$('unitInput').value.trim()||state.calibration.unit;
+    syncCalibrationInputs();
+    draw();
+  }
+  $('calLength').addEventListener('change',updateCalibrationFromInputs);
+  $('unitInput').addEventListener('change',updateCalibrationFromInputs);
+  $('trackBtn').onclick=()=>{setMode('track');overlay.style.cursor='crosshair';};
+  $('axesToggleBtn').onclick=()=>{
+    state.axesVisible=!state.axesVisible;
+    draw();
+  };
+  $('clearBtn').onclick=()=>{if(confirm('Clear all tracked points?')){const before=clone(state.points);state.points=[];state.selectedIndex=-1;pushAction({type:'points',before,after:[]});draw()}};
+  $('pointDisplay').onchange=e=>{
+    state.pointDisplay=e.target.value;
+    if(state.pointDisplay==='current'){
+      const exact=pointAtFrame(currentFrame());
+      if(exact>=0){
+        state.selectedIndex=exact;
+      }else if(state.selectedIndex<0 && state.points.length){
+        const candidates=state.points
+          .map((p,i)=>({p,i}))
+          .filter(o=>o.p.frame<=currentFrame())
+          .sort((a,b)=>b.p.frame-a.p.frame);
+        if(candidates.length) state.selectedIndex=candidates[0].i;
+      }
+    }
+    draw();
+  };
+  $('autoAdvance').onchange=e=>state.autoAdvance=e.target.value==='1';
+  $('timeOrigin').onchange=e=>{
+    const oldOrigin=state.timeOrigin;
+    const newOrigin=e.target.value;
+    if(oldOrigin===newOrigin)return;
+
+    // Shift derived from measured times, not from frame index over fps.
+    const sorted=[...state.points].sort((a,b)=>pointTime(a)-pointTime(b));
+    const firstTime=sorted.length?pointTime(sorted[0]):0;
+    const oldT0=(oldOrigin==='first')?firstTime:0;
+    const newT0=(newOrigin==='first')?firstTime:0;
+    const timeShift=oldT0-newT0;
+
+    state.timeOrigin=newOrigin;
+
+    const graphType=$('graphSelect').value;
+    if(state.graphLimitsManual && graphType!=='trajectory'){
+      state.graphLimits.xmin+=timeShift;
+      state.graphLimits.xmax+=timeShift;
+      populateLimitInputs();
+      updateLimitLabels();
+      renderData();
+      drawGraph();
+    }else{
+      renderData();
+      autoscaleGraph();
+    }
+    draw();
+  };
+  $('graphSelect').onchange=e=>{
+    e.target.blur();
+    // Show whichever model belongs to the plot being switched to.
+    $('fitSelect').value=currentFitModel();
+    updateLimitLabels();
+    autoscaleGraph();
+  };
+  $('autoscaleBtn').onclick=()=>{
+    autoscaleGraph();
+    $('scalePanel').classList.remove('open');
+  };
+  $('manualScaleBtn').onclick=()=>{
+    populateLimitInputs();
+    updateLimitLabels();
+    $('scalePanel').classList.toggle('open');
+  };
+  $('cancelScaleBtn').onclick=()=>$('scalePanel').classList.remove('open');
+  $('applyScaleBtn').onclick=()=>{
+    applyGraphLimits();
+    const invalid=['xMin','xMax','yMin','yMax'].some(id=>$(id).classList.contains('invalid'));
+    if(!invalid) $('scalePanel').classList.remove('open');
+  };
+  ['xMin','xMax','yMin','yMax'].forEach(id=>{
+    $(id).addEventListener('keydown',e=>{
+      if(e.key==='Enter') $('applyScaleBtn').click();
+    });
+  });
+  $('saveProjectBtn').onclick=saveProject;
+  $('loadProjectBtn').onclick=()=>$('projectInput').click();
+  $('projectInput').onchange=e=>{if(e.target.files[0])loadProject(e.target.files[0])};
+  // One delegated handler rather than a listener per row rebuilt on every redraw.
+  $('dataBody').addEventListener('click',event=>{
+    const tr=event.target.closest('tr');
+    if(!tr||tr.dataset.frame===undefined) return;
+    const frame=Number(tr.dataset.frame);
+    seekFrame(frame);
+    state.selectedIndex=state.points.findIndex(p=>p.frame===frame);
+    draw();
+  });
+  // ---- Brush selection on the graph ------------------------------------
+  (function initBrush(){
+    let brushing=false, start=null, current=null;
+
+    const localPoint=e=>{
+      const r=graph.getBoundingClientRect();
+      return {x:e.clientX-r.left, y:e.clientY-r.top};
+    };
+    const insidePlot=p=>{
+      if(!lastPlot) return false;
+      const {m,W,H}=lastPlot;
+      return p.x>=m.l&&p.x<=W-m.r&&p.y>=m.t&&p.y<=H-m.b;
+    };
+
+    graph.addEventListener('pointerdown',e=>{
+      if(!lastPlot||!plottedRows.length) return;
+      const p=localPoint(e);
+      if(!insidePlot(p)) return;
+      brushing=true;start=p;current=p;
+      graph.setPointerCapture(e.pointerId);
+      graph.style.cursor='crosshair';
+      e.preventDefault();
+    });
+
+    graph.addEventListener('pointermove',e=>{
+      if(!brushing){
+        if(lastPlot) graph.style.cursor=insidePlot(localPoint(e))?'crosshair':'default';
+        return;
+      }
+      current=localPoint(e);
+      drawGraph();
+      // Draw the rubber band over the freshly rendered plot.
+      gctx.save();
+      gctx.fillStyle='rgba(245,158,11,.14)';
+      gctx.strokeStyle='rgba(245,158,11,.85)';
+      gctx.lineWidth=1.5;
+      const x=Math.min(start.x,current.x),y=Math.min(start.y,current.y);
+      const w=Math.abs(current.x-start.x),h=Math.abs(current.y-start.y);
+      gctx.fillRect(x,y,w,h);
+      gctx.strokeRect(x,y,w,h);
+      gctx.restore();
+    });
+
+    const finish=e=>{
+      if(!brushing) return;
+      brushing=false;
+      graph.style.cursor='default';
+      try{graph.releasePointerCapture(e.pointerId)}catch{}
+      const dx=Math.abs(current.x-start.x), dy=Math.abs(current.y-start.y);
+      // A click that is not a drag does nothing. It used to clear the
+      // selection, which meant one stray click on the plot silently threw the
+      // chosen range away and re-fitted the whole data set. Clearing is now a
+      // deliberate act: the Clear selection button, or a double-click.
+      if(dx<4&&dy<4){ return; }
+
+      const x0=Math.min(start.x,current.x), x1=Math.max(start.x,current.x);
+      const y0=Math.min(start.y,current.y), y1=Math.max(start.y,current.y);
+      const type=$('graphSelect').value;
+      const {px,py}=lastPlot;
+      const picked=[];
+      plottedRows.forEach(r=>{
+        const vx=(type==='trajectory')?r.x:r.t;
+        const vy=(type==='trajectory')?r.y:r[type];
+        if(!Number.isFinite(vx)||!Number.isFinite(vy)) return;
+        const X=px(vx),Y=py(vy);
+        if(X>=x0&&X<=x1&&Y>=y0&&Y<=y1) picked.push(r.frame);
+      });
+      setSelection(picked);
+      drawGraph();
+    };
+    graph.addEventListener('pointerup',finish);
+    graph.addEventListener('pointercancel',finish);
+    graph.addEventListener('dblclick',()=>{clearSelection();drawGraph();});
+  })();
+
+  // The panel floats over the plot, so it needs to be movable when it lands on
+  // the data. Position is remembered for the session.
+  (function initFitPanelDrag(){
+    const panel=$('fitPanel');
+    let dragging=false, startX=0, startY=0, baseLeft=0, baseTop=0;
+
+    panel.addEventListener('pointerdown',e=>{
+      const frame=$('graphLimits').getBoundingClientRect();
+      const rect=panel.getBoundingClientRect();
+      dragging=true;
+      startX=e.clientX; startY=e.clientY;
+      baseLeft=rect.left-frame.left; baseTop=rect.top-frame.top;
+      // Switch from right/bottom anchoring to left/top so dragging is absolute.
+      panel.style.left=baseLeft+'px';
+      panel.style.top=baseTop+'px';
+      panel.style.right='auto';
+      panel.style.bottom='auto';
+      panel.classList.add('dragging');
+      panel.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+
+    panel.addEventListener('pointermove',e=>{
+      if(!dragging) return;
+      const frame=$('graphLimits').getBoundingClientRect();
+      const rect=panel.getBoundingClientRect();
+      // Keep it inside the graph frame so it cannot be lost off-edge.
+      const maxLeft=Math.max(0,frame.width-rect.width);
+      const maxTop=Math.max(0,frame.height-rect.height);
+      const left=Math.min(maxLeft,Math.max(0,baseLeft+e.clientX-startX));
+      const top=Math.min(maxTop,Math.max(0,baseTop+e.clientY-startY));
+      panel.style.left=left+'px';
+      panel.style.top=top+'px';
+    });
+
+    const stop=e=>{
+      if(!dragging) return;
+      dragging=false;
+      panel.classList.remove('dragging');
+      try{panel.releasePointerCapture(e.pointerId)}catch{}
+    };
+    panel.addEventListener('pointerup',stop);
+    panel.addEventListener('pointercancel',stop);
+  })();
+
+  $('fitSelect').onchange=e=>{
+    e.target.blur();
+    state.fitModels[$('graphSelect').value]=e.target.value;
+    autoscaleGraph();
+  };
+
+  $('clearSelectionBtn').onclick=()=>{clearSelection();drawGraph();};
+
+  $('copyDataBtn').onclick=copyDataToClipboard;
+  setupTableSelection();
+  $('exportCsvBtn').onclick=exportCSV;
+  document.addEventListener('keydown',e=>{
+    const active=document.activeElement;
+    // A <select> keeps focus after you change it, which used to swallow every
+    // shortcut - most visibly Delete, so points became undeletable once the
+    // student had touched the graph or fit dropdown. Delete never types into a
+    // select, so let it through; arrows still belong to the select.
+    if(active && ['INPUT','TEXTAREA'].includes(active.tagName)) return;
+    if(active && active.tagName==='SELECT'){
+      if(e.key!=='Delete'&&e.key!=='Backspace') return;
+      active.blur();
+    }
+    // A button still holding focus after a click also answers to Space, which
+    // toggled playback twice.
+    if(e.code==='Space' && active && active.tagName==='BUTTON') active.blur();
+    if(e.code==='Space'){e.preventDefault();video.paused?video.play():video.pause()}
+    // Arrow keys now step by the same stride as the transport buttons.
+    else if(e.key==='ArrowRight'){e.preventDefault();seekFrame(currentFrame()+state.stride*(e.ctrlKey?10:1))}
+    else if(e.key==='ArrowLeft'){e.preventDefault();seekFrame(currentFrame()-state.stride*(e.ctrlKey?10:1))}
+    else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo()}
+    else if((e.key==='Delete'||e.key==='Backspace')&&state.selectedIndex>=0){
+      e.preventDefault();
+      const before=clone(state.points);
+      state.points.splice(state.selectedIndex,1);
+      state.selectedIndex=-1;
+      state.hoverIndex=-1;
+      pushAction({type:'points',before,after:clone(state.points)});
+      draw();
+    }
+    else if(e.key==='Home'){e.preventDefault();seekFrame(0)}
+    else if(e.key==='End'){e.preventDefault();seekFrame(lastFrame())}
+  });
+  new ResizeObserver(resizeOverlay).observe(wrap);
+  new ResizeObserver(resizeGraphCanvas).observe(graph.parentElement);
+  window.addEventListener('resize',()=>{resizeOverlay();resizeGraphCanvas();});
+  resizeOverlay();updateLimitLabels();resizeGraphCanvas();
+})();
+</script>
+</body>
+</html>
