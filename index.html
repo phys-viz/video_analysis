@@ -202,6 +202,13 @@
   .tool-card input#unitInput{width:3.3em;min-width:0}
   .status{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.3}
   .cal-accent{color:var(--calcolor);font-weight:600}
+  .swatches{display:inline-flex;gap:4px;align-items:center;margin-left:2px}
+  .swatch{
+    width:16px;height:16px;padding:0;border-radius:50%;
+    border:2px solid transparent;cursor:pointer;
+  }
+  .swatch:hover{border-color:#94a3b8}
+  .swatch.active{border-color:#fff;box-shadow:0 0 0 1px #0f172a}
 
   /* ---------- output side ---------- */
   .side{
@@ -265,7 +272,30 @@
   /* min-height:0, not 90px: the old floor fought the pane's percentage height
      and made the graph pane spill over and overlap the splitter and table. */
   .graph-frame{position:relative;flex:1 1 auto;min-height:0;display:block;overflow:hidden}
-  .graph-canvas-wrap{width:100%;height:100%}
+  .graph-canvas-wrap{width:var(--graph-width,100%);height:100%}
+  /* Only useful with the video hidden, where the panel is wide enough that a
+     full-width plot stretches the data out of shape. */
+  /* Just inside the plot area: the frame clips overflow, so a handle sitting on
+     the boundary would be invisible and unclickable. */
+  .graph-width-handle{
+    position:absolute;top:0;bottom:0;z-index:6;
+    left:var(--graph-width,100%);
+    width:18px;margin-left:-18px;
+    cursor:col-resize;touch-action:none;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .graph-width-handle::before{
+    content:"⋮";
+    font-size:15px;line-height:1;color:#0f172a;
+    background:#94a3b8;border-radius:4px;
+    padding:10px 3px;
+  }
+  .graph-width-handle:hover::before,.graph-width-handle.dragging::before{background:var(--accent2)}
+  .graph-width-handle{opacity:.65}
+  .graph-width-handle:hover,.graph-width-handle.dragging{opacity:1}
+  /* An outline with an offset reads as the plot jumping when it first gains
+     focus; a border-colour change says the same thing without the movement. */
+  canvas.graph:focus{outline:none;border-color:var(--accent2)}
   canvas.graph{
     width:100%;height:100%;min-height:0;max-height:none;
     background:var(--graph-bg);
@@ -327,6 +357,37 @@
     font-size:10px;color:#64748b;letter-spacing:-1px;
   }
   .fit-panel .fit-warn{color:#fca5a5;font-size:11px;margin-top:3px}
+
+  /* Fixed to the window, not the graph frame: inside the frame it was clipped
+     whenever the graph pane was narrow or collapsed, so the message a student
+     needed most simply never appeared. */
+  .toast{
+    position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:90;
+    display:flex;align-items:center;gap:10px;
+    padding:7px 13px;border-radius:99px;
+    background:rgba(12,58,36,.95);border:1px solid #15803d;color:#4ade80;
+    font-size:12px;white-space:nowrap;pointer-events:none;
+  }
+  /* Amber when it is reporting a loss rather than confirming a success. */
+  /* Louder than an ordinary confirmation: this one reports a loss and offers a
+     way back, so it has to be noticed rather than glanced past. */
+  .toast.toast-actionable{
+    background:rgba(69,26,3,.97);border:2px solid var(--accent2);color:#fed7aa;
+    font-size:13px;padding:11px 16px;gap:14px;
+    box-shadow:0 10px 30px rgba(0,0,0,.55);
+    pointer-events:auto;
+    animation:toast-rise .18s ease-out;
+  }
+  @keyframes toast-rise{
+    from{opacity:0;transform:translate(-50%,10px)}
+    to{opacity:1;transform:translate(-50%,0)}
+  }
+  .toast.toast-actionable::before{content:"⚠";font-size:15px}
+  .toast-action{
+    padding:5px 14px;border-radius:99px;font-size:12px;font-weight:700;
+    background:var(--accent2);border:1px solid var(--accent2);color:#1f1204;
+  }
+  .toast-action:hover{background:#fbbf24;border-color:#fbbf24}
   .scale-panel .scale-head{color:var(--muted);font-size:12px;text-align:center}
   .scale-panel .scale-axis{color:var(--text);font-size:12px;font-weight:600}
   .scale-panel input{width:74px;padding:5px 6px}
@@ -343,18 +404,31 @@
     border:1px solid var(--line);border-radius:var(--r-md);
     background:var(--well);
   }
+  /* Lives outside the scrolling pane so the buttons never slide out of view
+     when the table is wider than the window. */
   .data-toolbar{
-    position:sticky;top:0;z-index:4;
-    display:flex;justify-content:flex-end;
+    flex:0 0 auto;
+    display:flex;align-items:center;gap:8px;
     padding:6px 8px;background:var(--well);
-    border-bottom:1px solid var(--line);
+    border:1px solid var(--line);border-bottom:none;
+    border-radius:var(--r-md) var(--r-md) 0 0;
   }
+  #dataTab{border-radius:0 0 var(--r-md) var(--r-md)}
   .data-toolbar button{padding:5px 9px;font-size:12px}
   #copyStatus{margin-right:auto;align-self:center;font-size:12px;color:var(--muted)}
   table{width:100%;border-collapse:collapse;font-size:12px}
   #dataTab table{margin:0}
-  #dataTab thead{position:sticky;top:39px;z-index:2;background:var(--panel)}
-  th,td{padding:6px 7px;border-bottom:1px solid var(--line);text-align:right}
+    /* The toolbar now sits outside the scrolling pane, so the header sticks to
+     the very top. It used to be offset by the toolbar's height, which left it
+     floating over the first data row and swallowing clicks meant for it. */
+  #dataTab thead{position:sticky;top:0;z-index:2;background:var(--panel)}
+  th,td{
+    padding:5px 6px;text-align:right;
+    border-bottom:1px solid rgba(51,65,85,.55);
+    border-right:1px solid rgba(71,85,105,.5);
+  }
+  #dataTab tr th:last-child,#dataTab tr td:last-child{border-right:none}
+  #dataTab thead th{border-bottom:1px solid var(--line)}
   th:first-child,td:first-child{text-align:left}
   th{
     font-size:11px;letter-spacing:.04em;
@@ -364,6 +438,60 @@
   tr.current{background:rgba(56,189,248,.12)}
   /* Excluded rows stay readable: the student needs to see what they left out. */
   tr.excluded td{opacity:.38}
+  th.computed-col{color:#c084fc}
+  /* Visibly broken beats mysteriously empty: the formula refers to a column
+     that no longer exists. */
+  th.broken-col{color:#fca5a5}
+  th.broken-col .col-label::after{content:" ⚠";font-size:10px}
+  /* Row numbers: an affordance, not data - never selected, never copied. */
+  /* Four digits is plenty - nobody tracks past a few hundred points. */
+  .row-gutter{
+    width:26px;min-width:26px;max-width:26px;
+    padding-left:3px;padding-right:4px;text-align:right;
+    color:#475569;font-size:10px;
+    background:var(--well);
+    cursor:default!important;user-select:none;
+  }
+  /* The × and the grip are invisible until the header is hovered, so they
+     overlay the label instead of reserving width in every column. */
+  #dataTab th{position:relative;padding-right:6px;text-align:center}
+  #dataTab th .col-label{display:block;overflow:hidden;text-overflow:ellipsis}
+  #dataTab th.row-gutter{width:26px;min-width:26px;max-width:26px;padding:5px 4px}
+  /* Kept well clear of the resize grip on the right edge: they used to sit a
+     few pixels apart, so reaching for the width handle could delete a column. */
+  .col-remove{
+    position:absolute;top:50%;right:9px;transform:translateY(-50%);
+    padding:0;width:14px;height:14px;line-height:1;
+    background:var(--panel);
+    font-size:12px;border-radius:50%;
+    background:transparent;border:none;color:#64748b;opacity:0;
+  }
+  .col-edit{
+    position:absolute;top:50%;right:38px;transform:translateY(-50%);
+    padding:0;width:16px;height:16px;line-height:1;
+    font-size:11px;border-radius:50%;
+    background:transparent;border:none;color:#64748b;opacity:0;
+  }
+  #dataTab th:hover .col-edit{opacity:1}
+  .col-edit:hover{background:#0c3a4f;border:none;color:#7dd3fc}
+  th.computed-col{padding-right:64px}
+  #dataTab th:hover .col-remove{opacity:1}
+  .col-remove:hover{background:#3f1d1d;border:none;color:#fca5a5}
+  .col-resize{
+    position:absolute;top:0;right:0;width:7px;height:100%;
+    cursor:col-resize;user-select:none;
+  }
+  .col-resize:hover,.col-resize.dragging{background:var(--accent);opacity:.7}
+  /* Fixed layout so an explicit width on one column is actually honoured. */
+  /* No min-width:100% - that stretched every column to fill the pane, which is
+     what made them look padded out. The table now takes only what it needs. */
+  #dataTab table{table-layout:fixed;width:max-content}
+  #dataTab th,#dataTab td{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .col-rename-input{
+    width:100%;padding:2px 4px;font:inherit;
+    background:var(--stage);border:1px solid var(--accent);border-radius:3px;
+    color:var(--text);
+  }
   tr.in-selection td:first-child{box-shadow:inset 3px 0 0 var(--accent2)}
   tr.selected{outline:1px solid var(--accent2)}
   /* Spreadsheet-style rectangular cell selection */
@@ -377,6 +505,58 @@
   }
   #dataTab th.selection-anchor,
   #dataTab td.selection-anchor{box-shadow:inset 0 0 0 2px var(--accent)}
+
+  /* ---------- data mode ---------- */
+  .data-toolbar-left{display:flex;gap:7px;margin-right:auto}
+  .data-toolbar-left button{padding:5px 9px;font-size:12px}
+  .col-dialog{
+    position:fixed;inset:0;z-index:70;display:grid;place-items:center;
+    background:rgba(2,6,23,.75);
+  }
+  .col-dialog-card{
+    width:min(560px,calc(100vw - 32px));
+    padding:18px;border-radius:var(--r-lg);
+    border:1px solid var(--line);background:var(--panel);
+  }
+  .col-dialog-card h3{margin:0 0 4px;font-size:15px}
+  .col-dialog-card p{margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5}
+  .col-dialog-card textarea{
+    width:100%;min-height:150px;resize:vertical;
+    background:var(--well);color:var(--text);
+    border:1px solid var(--line);border-radius:var(--r-sm);
+    padding:9px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+  }
+  .col-dialog-card input[type=text]{width:100%;margin-bottom:8px}
+  .col-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+  .col-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+  .col-error{color:#fca5a5;font-size:12px;margin-top:8px;min-height:16px}
+  /* A parsed preview beats staring at raw text: tab stops never line up when
+     the header is short and the values are long, which reads as a bug. */
+  .paste-preview{
+    margin-top:10px;padding:8px 9px;
+    border:1px solid var(--line);border-radius:var(--r-md);
+    background:var(--well);
+    max-height:190px;overflow:auto;
+  }
+  .paste-preview .pp-note{font-size:11px;color:var(--muted);margin-bottom:6px}
+  .paste-preview table{border-collapse:collapse;font-size:11.5px;width:auto}
+  .paste-preview th,.paste-preview td{
+    padding:3px 8px;text-align:right;white-space:nowrap;
+    border-right:1px solid rgba(71,85,105,.5);
+    border-bottom:1px solid rgba(51,65,85,.5);
+  }
+  .paste-preview th{color:var(--accent);font-weight:600}
+  .paste-preview th:last-child,.paste-preview td:last-child{border-right:none}
+  .paste-preview .pp-unit{color:var(--muted);font-weight:400}
+  .formula-help{
+    font-size:11px;color:var(--muted);margin-top:8px;line-height:1.7;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  .formula-help .fh-label{
+    display:inline-block;min-width:76px;
+    color:var(--text);font-weight:600;
+    font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+  }
 
   /* ---------- responsive ---------- */
   @media(max-width:1100px){
@@ -399,6 +579,48 @@
 </style>
 </head>
 <body>
+<div id="pasteDialog" class="col-dialog hidden">
+    <div class="col-dialog-card">
+      <h3>Paste data</h3>
+      <p>Paste columns from a spreadsheet, or type them separated by tabs, commas or spaces. If the first row is text it becomes the column names.</p>
+      <textarea id="pasteArea" placeholder="t&#9;L&#10;0.5&#9;0.25&#10;0.7&#9;0.49"></textarea>
+      <div id="pastePreview" class="paste-preview hidden"></div>
+      <div id="pasteError" class="col-error"></div>
+      <div class="col-actions">
+        <button id="pasteCancelBtn">Cancel</button>
+        <button id="pasteOkBtn">Add columns</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="columnDialog" class="col-dialog hidden">
+    <div class="col-dialog-card">
+      <h3 id="columnDialogTitle">Computed column</h3>
+      <p>Build a new column from the ones you already have. Useful for linearising: plot y against t^2 and the slope means something.</p>
+      <div class="col-row">
+        <input id="columnName" type="text" placeholder="name, e.g. t2">
+        <input id="columnUnit" type="text" placeholder="unit, e.g. s^2">
+      </div>
+      <div id="formulaRow"><input id="columnFormula" type="text" placeholder="formula, e.g. t^2"></div>
+      <div id="columnError" class="col-error"></div>
+      <div class="formula-help">
+        <span class="fh-label">Operators</span> + &minus; * / ^ ( )<br>
+        <span class="fh-label">Functions</span> sqrt abs exp ln log sin cos tan asin acos atan<br>
+        <span class="fh-label">Constants</span> pi e<br>
+        <span class="fh-label">Keywords</span> first last min max mean sum &mdash; these use the whole column<br>
+        <span class="fh-label">Examples</span> t - first &nbsp;&middot;&nbsp; y / max &nbsp;&middot;&nbsp; first(x) &nbsp;&middot;&nbsp; t^2 gives t&sup2;
+      </div>
+      <div class="col-actions">
+        <button id="columnDeleteBtn" class="danger hidden" type="button">Delete column</button>
+        <span class="spacer"></span>
+        <button id="columnCancelBtn">Cancel</button>
+        <button id="columnOkBtn">Add column</button>
+      </div>
+    </div>
+  </div>
+
+<div id="toast" class="toast hidden"></div>
+
 <div class="app">
   <div class="toolbar">
     <input id="videoInput" type="file" accept="video/*" />
@@ -410,7 +632,7 @@
   </div>
 
   <div class="main">
-    <section class="video-panel">
+    <section class="video-panel" id="videoPanel">
       <div id="videoWrap" class="video-wrap">
         <video id="video" preload="metadata"></video>
         <canvas id="overlay" class="overlay" style="cursor:crosshair"></canvas>
@@ -428,7 +650,7 @@
           <button id="nextBtn" class="stereo-btn" title="Next frame">▶|</button>
           <label class="mini-field" title="Steps the transport. Timestamps are read from the video itself, so this no longer affects measured velocities.">FPS <input id="fpsInput" type="number" min="1" max="1000" step="0.001" value="30"></label>
           <button id="fpsHint" class="fps-hint hidden" type="button"></button>
-          <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v34</span>
+          <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v54</span>
           <label class="mini-field">Stride <input id="strideInput" type="number" min="1" max="99" step="1" value="1"></label>
         </div>
       </div>
@@ -450,6 +672,7 @@
           <div class="tool-row">
             <button id="trackBtn" class="active">Track points</button>
             <button id="clearBtn" class="danger">Clear points</button>
+            <span class="swatches" id="pointColors" title="Point colour — pick one that stands out against your footage"></span>
           </div>
           <div class="tool-row">
             <label>Visible points
@@ -485,16 +708,8 @@
         <div class="content">
           <div id="graphTab">
             <div class="graph-toolbar">
-              <label>Plot
-                <select id="graphSelect">
-                  <option value="x">x vs t</option>
-                  <option value="y" selected>y vs t</option>
-                  <option value="vx">vx vs t</option>
-                  <option value="vy">vy vs t</option>
-                  <option value="speed">speed vs t</option>
-                  <option value="trajectory">y vs x</option>
-                </select>
-              </label>
+              <label>Y <select id="axisYSelect"></select></label>
+              <label>vs X <select id="axisXSelect"></select></label>
               <button id="autoscaleBtn">Autoscale</button>
               <button id="manualScaleBtn">Manual scale</button>
               <label class="fit-field">Fit
@@ -531,27 +746,25 @@
                 <span id="selectionCount"></span>
                 <button id="clearSelectionBtn" type="button" title="Also: double-click the plot">Clear selection</button>
               </div>
+              <div id="graphWidthHandle" class="graph-width-handle hidden" title="Drag to set the graph width. Double-click to fill."></div>
               <div class="graph-canvas-wrap">
                 <canvas id="graph" class="graph" width="800" height="500"></canvas>
               </div>
             </div>
           </div>
           <div id="outputSplitter" class="splitter-h" title="Drag to resize the graph and table. Double-click to reset."></div>
-          <div id="dataTab">
-            <div class="data-toolbar">
-              <span id="copyStatus">Click headers or drag cells; then Ctrl/Cmd+C</span>
-              <button id="copyDataBtn">Copy data</button>
+          <div class="data-toolbar">
+            <div class="data-toolbar-left">
+              <button id="pasteDataBtn" title="Paste columns of data from a spreadsheet">Paste data</button>
+              <button id="addColumnBtn" title="Add a column computed from the others">Add calculated column</button>
+              <button id="toggleVideoBtn" title="Show or hide the video half">Hide video</button>
             </div>
+            <span id="copyStatus">Click headers or drag cells; then Ctrl/Cmd+C</span>
+            <button id="copyDataBtn">Copy data</button>
+          </div>
+          <div id="dataTab">
             <table>
-              <thead><tr>
-                <th title="Click to select this column">Frame</th>
-                <th id="timeHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">t (s)</th>
-                <th id="xHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">x</th>
-                <th id="yHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">y</th>
-                <th id="vxHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">vx</th>
-                <th id="vyHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">vy</th>
-                <th id="speedHeader" title="Click to select; Shift or Ctrl/Cmd-click for multiple columns">speed</th>
-              </tr></thead>
+              <thead id="dataHead"></thead>
               <tbody id="dataBody"></tbody>
             </table>
           </div>
@@ -566,7 +779,9 @@
 (() => {
   const $ = id => document.getElementById(id);
   const video = $('video'), wrap = $('videoWrap'), overlay = $('overlay'), ctx = overlay.getContext('2d');
-  const graph = $('graph'), gctx = graph.getContext('2d');
+  let graph=$('graph'), gctx=graph.getContext('2d');
+  // When true, plot() uses print styling: white ground, black axes, larger type.
+  let exportTheme=false;
   const main = document.querySelector('.main');
   const splitter = $('splitter');
   const SPLIT_KEY = 'mva-panel-split-v12';
@@ -580,12 +795,17 @@
     requestAnimationFrame(()=>{resizeOverlay();resizeGraphCanvas();});
   }
   function resizeGraphCanvas(){
-    const rect=graph.getBoundingClientRect();
+    // clientWidth/clientHeight, not getBoundingClientRect: the rect includes the
+    // canvas border while the drawing code lays out with the client box. The two
+    // differed by the border width, so the tick-count calculation could round to
+    // a different number of gridlines between renders - which looked like the
+    // graph rescaling itself the first time you clicked it.
+    const w=graph.clientWidth, h=graph.clientHeight;
     // Collapsed, or not laid out yet - nothing to size and nothing to draw.
-    if(rect.width<2||rect.height<2) return;
+    if(w<2||h<2) return;
     const ratio=window.devicePixelRatio||1;
-    const width=Math.max(1,Math.round(rect.width*ratio));
-    const height=Math.max(1,Math.round(rect.height*ratio));
+    const width=Math.max(1,Math.round(w*ratio));
+    const height=Math.max(1,Math.round(h*ratio));
     if(graph.width!==width||graph.height!==height){
       graph.width=width;graph.height=height;
       gctx.setTransform(ratio,0,0,ratio,0,0);
@@ -633,6 +853,13 @@
 
   let graphCollapsed=false;
   let graphPercent=DEFAULT_VSPLIT;
+  // Once the student drags the handle, stop imposing a default on them.
+  let outputSplitTouched=false;
+  function setGraphSplitPercent(percent){
+    graphCollapsed=false;
+    graphPercent=clamp(percent,4,96);
+    renderOutputSplit();
+  }
 
   function renderOutputSplit(){
     outputPane.classList.toggle('graph-collapsed',graphCollapsed);
@@ -681,7 +908,7 @@
     let dragging=false;
     outputSplitter.addEventListener('pointerdown',e=>{
       if(window.innerWidth<=1000)return;
-      dragging=true;outputSplitter.classList.add('dragging');
+      dragging=true;outputSplitTouched=true;outputSplitter.classList.add('dragging');
       outputSplitter.setPointerCapture(e.pointerId);
       document.body.style.cursor='row-resize';e.preventDefault();
     });
@@ -712,6 +939,7 @@
     calibration:null, calibrationDraft:[], calibrationVisible:true, calHover:null,
     origin:{x:0.18,y:0.82}, angle:0, axesVisible:true,
     points:[], selectedIndex:-1, hoverIndex:-1, rotHover:false, dragging:null,
+    pointColor:'#ef4444',
     pointDisplay:'recent', recentCount:5, autoAdvance:true, timeOrigin:'first',
     graphLimits:{xmin:null,xmax:null,ymin:null,ymax:null}, graphLimitsManual:false,
     undoStack:[], dragSnapshot:null, expectedVideo:null,
@@ -719,10 +947,23 @@
     // survives switching graph type: pick the free-fall arc on y vs t and the
     // same physical interval stays chosen on vx vs t.
     selection:null,
+    // One selection per plotted pair. A brush is a statement about a particular
+    // plot: choosing the free-fall arc on y vs t should not silently re-fit a
+    // different plot you made earlier.
+    selections:{},
     // One fit per plotted quantity. A quadratic on y vs t is a claim about y,
     // so it must not follow you to x vs t - but it should still be there when
     // you come back to y vs t.
-    fitModels:{}
+    fitModels:{},
+    // 'video' fills the table by tracking; 'data' by pasting or typing. Both
+    // feed the same column table, so plotting, selection and fitting have one
+    // implementation rather than one per mode.
+    showVideo:true,
+    columnWidths:{},
+    graphWidth:100,          // percent of the panel, used when the video is hidden
+    dataColumns:[],      // [{name, unit, values:[]}] for pasted/typed data
+    computedColumns:[],  // [{name, unit, formula}]
+    axisX:'t', axisY:'y'
   };
 
   // ---- Timing ---------------------------------------------------------
@@ -1121,20 +1362,69 @@
     return bestIndex;
   }
 
+  // The ring is a darkened version of the chosen colour, so it keeps reading as
+  // a shadow rather than a second colour fighting the first.
+  function shadePoint(hex,factor){
+    const m=/^#?([0-9a-f]{6})$/i.exec(hex||'');
+    if(!m) return '#7f1d1d';
+    const n=parseInt(m[1],16);
+    const clamp255=v=>Math.max(0,Math.min(255,Math.round(v)));
+    // Lightening pushes toward white so a pale colour still brightens visibly.
+    const mix=(c)=>factor<=1?c*factor:c+(255-c)*(factor-1);
+    const r=clamp255(mix((n>>16)&255));
+    const g=clamp255(mix((n>>8)&255));
+    const b=clamp255(mix(n&255));
+    return 'rgb('+r+','+g+','+b+')';
+  }
+  function trailColor(){
+    const m=/^#?([0-9a-f]{6})$/i.exec(state.pointColor||'');
+    if(!m) return 'rgba(239,68,68,.35)';
+    const n=parseInt(m[1],16);
+    return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+',.4)';
+  }
+
   function drawPoints(){
     const inds=visiblePointIndices(), f=currentFrame();
+
+    // The trail stays - unlike on the graph, it is not a claim about what
+    // happened between measurements, it IS the path, and a point kinked off a
+    // smooth arc is the clearest sign of a mistrack. Kept thin and faint so it
+    // reads as a guide rather than competing with the points themselves.
     if(state.pointDisplay!=='current' && inds.length>1){
-      ctx.strokeStyle='rgba(239,68,68,.65)';ctx.lineWidth=2;ctx.beginPath();
+      ctx.strokeStyle=trailColor();ctx.lineWidth=1.8;ctx.beginPath();
       inds.forEach((i,k)=>{const s=screenFromNorm(state.points[i]); if(k===0)ctx.moveTo(s.x,s.y);else ctx.lineTo(s.x,s.y)});
       ctx.stroke();
     }
+
     inds.forEach(i=>{
       const p=state.points[i], s=screenFromNorm(p);
       const current=p.frame===f, selected=i===state.selectedIndex, hovered=i===state.hoverIndex;
-      ctx.fillStyle=selected?'#f59e0b':hovered?'#fde68a':current?'#fff':'#ef4444';
-      ctx.strokeStyle=selected?'#fff':hovered?'#f59e0b':'#7f1d1d';ctx.lineWidth=selected||hovered?3:2;
-      ctx.beginPath();ctx.arc(s.x,s.y,selected?9:hovered?8:current?7:5,0,Math.PI*2);ctx.fill();ctx.stroke();
-      ctx.fillStyle='#fff';ctx.font='11px sans-serif';ctx.fillText(String(p.frame),s.x+8,s.y-8);
+      // Resting points are small; the frame being placed is the one that stands out.
+      const radius=selected?8:hovered?7:current?6.5:3.5;
+      // Selected and hovered are lightened versions of the chosen colour rather
+      // than a fixed amber: that keeps the whole overlay in one family, and it
+      // stays legible even when the student picks amber as the point colour.
+      ctx.fillStyle=selected?shadePoint(state.pointColor,1.55)
+                   :hovered?shadePoint(state.pointColor,1.35)
+                   :current?'#fff':state.pointColor;
+      ctx.strokeStyle=(selected||hovered)?'#fff':shadePoint(state.pointColor,0.45);
+      ctx.lineWidth=selected||hovered?3:current?2:1.5;
+      ctx.beginPath();ctx.arc(s.x,s.y,radius,0,Math.PI*2);ctx.fill();ctx.stroke();
+
+      // Only for a point you have deliberately moved onto. Placing a point also
+      // selects it, so keying off selection put a label under the cursor on
+      // every single click - exactly the clutter this was meant to remove.
+      if(hovered&&i!==labelSuppressedFor){
+        const label=String(p.frame);
+        ctx.font='600 12px system-ui, -apple-system, Segoe UI, sans-serif';
+        const w=ctx.measureText(label).width;
+        const lx=s.x+radius+5, ly=s.y-radius-14;
+        ctx.fillStyle='rgba(2,6,23,.78)';
+        ctx.beginPath();ctx.rect(lx-3,ly,w+6,16);ctx.fill();
+        ctx.fillStyle='#fde68a';
+        ctx.textAlign='left';ctx.textBaseline='middle';
+        ctx.fillText(label,lx,ly+8);
+      }
     });
   }
 
@@ -1190,7 +1480,23 @@
   }
   function applyAction(action, direction){
     const value = direction==='undo' ? action.before : action.after;
-    if(action.type==='selection'){ state.selection=value?[...value]:null; updateSelectionBar(); }
+    if(action.type==='columns'){
+      // Paste, delete, rename and formula edits all move the same two arrays, so
+      // one snapshot type covers every column operation.
+      state.dataColumns=clone(value.dataColumns);
+      state.computedColumns=clone(value.computedColumns);
+      $('dataHead').dataset.sig='\u0000';
+      renderData();
+      refreshAxisPickers();
+      autoscaleGraph();
+    }
+    else if(action.type==='selection'){
+      // Snapshots of the whole per-pair map, so undo restores the selection on
+      // whichever plot it belonged to.
+      state.selections=value?clone(value):{};
+      state.selection=currentSelection();
+      updateSelectionBar();
+    }
     else if(action.type==='points') state.points=clone(value);
     else if(action.type==='origin') state.origin=clone(value);
     else if(action.type==='angle') state.angle=value;
@@ -1314,6 +1620,7 @@
     }
 
     state.hoverIndex=state.selectedIndex;
+    labelSuppressedFor=state.selectedIndex;
     pushAction({type:'points',before,after:clone(state.points)});
     draw();
 
@@ -1322,8 +1629,15 @@
     }
   });
 
+  // A real pointer move, tracked in screen pixels so a redraw does not count.
+  let lastPointerScreen=null;
   overlay.addEventListener('pointermove',e=>{
     const p=normFromEvent(e);
+    if(!lastPointerScreen||
+       Math.hypot(e.clientX-lastPointerScreen.x,e.clientY-lastPointerScreen.y)>2){
+      lastPointerScreen={x:e.clientX,y:e.clientY};
+      if(labelSuppressedFor>=0 && state.hoverIndex!==labelSuppressedFor) labelSuppressedFor=-1;
+    }
 
     if(!state.dragging){
       if(!insideVideoPoint(p)){
@@ -1441,21 +1755,281 @@
     outputsQueued=true;
     requestAnimationFrame(()=>{outputsQueued=false;renderData();drawGraph();});
   }
+  // Compact by default; drag any header edge to widen a single column.
+  const DEFAULT_COL_WIDTH=58;
+  const CELL_SIG_FIGS=4;
+
+  function renderHeader(){
+    const head=$('dataHead');
+    const cols=allColumns();
+    // Prefixed with the count, and including the formula, so an empty column set
+    // cannot produce an empty signature - that used to collide with the
+    // invalidation sentinel and skip the rebuild, leaving stale headers above an
+    // empty table after an undo.
+    const sig=cols.length+'#'+cols.map(c=>columnLabel(c)+':'+c.kind+':'+(c.formula||'')).join('|');
+    if(head.dataset.sig===sig) return;
+    head.dataset.sig=sig;
+    head.innerHTML='<tr><th class="row-gutter" title="Row number"></th>'+cols.map(c=>{
+      const editable=c.kind!=='video';
+      const broken=missingRefs(c);
+      const tip=broken.length
+        ? '= '+c.formula+' — missing column'+(broken.length===1?'':'s')+': '+broken.join(', ')
+        : (c.formula?('= '+c.formula+' — '):'')+
+          (editable?'double-click to edit name, unit'+(c.kind==='computed'?' and formula':''):'click to select column');
+      // With table-layout:fixed an explicit width is what actually decides the
+      // layout, so give every column one rather than relying on content.
+      const w=state.columnWidths[c.id]||DEFAULT_COL_WIDTH;
+      const style=` style="width:${w}px"`;
+      return `<th data-id="${c.id}" data-col="${c.name}" class="${c.kind==='computed'?'computed-col':''}${editable?' editable-col':''}${broken.length?' broken-col':''}" title="${tip}"${style}>`+
+        `<span class="col-label">${columnLabel(c)}</span>`+
+
+
+        `<span class="col-resize" data-resize="${c.id}" title="Drag to resize this column"></span>`+
+        `</th>`;
+    }).join('')+'</tr>';
+  }
+
   function renderData(){
-    const rows=computed(), cf=currentFrame(), body=$('dataBody');
-    const unit=state.calibration?.unit||'px';
-    $('timeHeader').textContent='t (s)';
-    $('xHeader').textContent=`x (${unit})`;
-    $('yHeader').textContent=`y (${unit})`;
-    $('vxHeader').textContent=`vx (${unit}/s)`;
-    $('vyHeader').textContent=`vy (${unit}/s)`;
-    $('speedHeader').textContent=`speed (${unit}/s)`;
+    const rows=tableRows(), cf=(state.points.length?currentFrame():-1), body=$('dataBody');
+    // Header labels now come from the column model, via renderHeader().
     const selectedPoint=state.selectedIndex>=0?state.points[state.selectedIndex]:null;
     const selectedFrame=selectedPoint?selectedPoint.frame:null;
     const set=selectionSet();
-    body.innerHTML=rows.map(r=>`<tr class="${r.frame===cf?'current':''} ${r.frame===selectedFrame?'selected':''} ${set?(set.has(r.frame)?'in-selection':'excluded'):''}" data-frame="${r.frame}">
-      <td>${r.frame}</td><td>${r.t.toFixed(3)}</td><td>${r.x.toFixed(4)}</td><td>${r.y.toFixed(4)}</td><td>${r.vx.toFixed(4)}</td><td>${r.vy.toFixed(4)}</td><td>${r.speed.toFixed(4)}</td></tr>`).join('');
+    const cols=allColumns();
+    renderHeader();
+    // Four significant figures is about what a hand-clicked point supports;
+    // toFixed(4) claimed a fixed number of decimals regardless of magnitude.
+    const cell=v=>{
+      if(v===undefined||v===null||(typeof v==='number'&&!Number.isFinite(v))) return '';
+      if(typeof v!=='number') return String(v);
+      if(v===0) return '0';
+      const abs=Math.abs(v);
+      if(abs<1e-4||abs>=1e6) return v.toExponential(3);
+      let s=v.toPrecision(CELL_SIG_FIGS);
+      // Trim the trailing zeros toPrecision adds, but keep integers looking whole.
+      if(s.includes('.')) s=s.replace(/0+$/,'').replace(/\.$/,'');
+      return s;
+    };
+    // The full value rides along in a data attribute so copying a subset does
+    // not hand back a rounded-off version of the data.
+    // 12 significant figures: far beyond the 4 on display, but short of the
+    // 17 that expose binary-representation noise like 0.46713300000000046.
+    const exact=v=>{
+      if(typeof v!=='number'||!Number.isFinite(v)) return '';
+      if(Number.isInteger(v)) return String(v);
+      return String(Number(v.toPrecision(12)));
+    };
+    body.innerHTML=rows.map((r,i)=>`<tr class="${r.frame===cf?'current':''} ${r.frame===selectedFrame?'selected':''} ${set?(set.has(r.frame)?'in-selection':'excluded'):''}" data-frame="${r.frame}">`+
+      `<td class="row-gutter">${i+1}</td>`+
+      cols.map(c=>`<td data-v="${exact(r[c.name])}">${cell(r[c.name])}</td>`).join('')+'</tr>').join('');
     if(tableSelection.selectedColumns.size||(tableSelection.anchor&&tableSelection.focus)) paintTableSelection();
+  }
+
+  // ---- Formula engine -------------------------------------------------
+  // A small recursive-descent parser over + - * / ^, parentheses, numbers,
+  // column names and a fixed function set. Deliberately not eval(): a student
+  // typo should produce an error message, not run arbitrary code.
+  const FORMULA_FUNCTIONS={
+    sin:Math.sin, cos:Math.cos, tan:Math.tan,
+    asin:Math.asin, acos:Math.acos, atan:Math.atan,
+    sqrt:Math.sqrt, abs:Math.abs, exp:Math.exp,
+    ln:Math.log, log:Math.log10,
+    sinh:Math.sinh, cosh:Math.cosh, tanh:Math.tanh
+  };
+  const FORMULA_CONSTANTS={pi:Math.PI, e:Math.E};
+
+  // Whole-column functions. Everything else in a formula sees one row at a time;
+  // these see the column, which is what "start the clock at zero" needs.
+  const AGGREGATES={
+    first:vals=>vals.length?vals[0]:NaN,
+    last:vals=>vals.length?vals[vals.length-1]:NaN,
+    min:vals=>vals.length?Math.min(...vals):NaN,
+    max:vals=>vals.length?Math.max(...vals):NaN,
+    mean:vals=>vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:NaN,
+    sum:vals=>vals.reduce((s,v)=>s+v,0)
+  };
+  const AGGREGATE_NAMES=Object.keys(AGGREGATES);
+
+  // Column names may carry true super/subscripts, so those characters count as
+  // part of an identifier: t² and x₀ are names, not names followed by an operator.
+  const SUPERSCRIPTS='\u00B2\u00B3\u00B9\u2070\u2074\u2075\u2076\u2077\u2078\u2079\u207A\u207B\u207F';
+  const SUBSCRIPTS='\u2080\u2081\u2082\u2083\u2084\u2085\u2086\u2087\u2088\u2089\u208A\u208B';
+  const GREEK='\u0391-\u03A9\u03B1-\u03C9';
+  const IDENT_START=new RegExp('[A-Za-z_'+GREEK+']');
+  const IDENT_PART=new RegExp('[A-Za-z0-9_'+SUPERSCRIPTS+SUBSCRIPTS+GREEK+']');
+
+  // Typing t^2 or x_0 produces t² and x₀, so students get real characters
+  // without hunting for a character map.
+  const SUP_MAP={'0':'\u2070','1':'\u00B9','2':'\u00B2','3':'\u00B3','4':'\u2074','5':'\u2075','6':'\u2076','7':'\u2077','8':'\u2078','9':'\u2079','+':'\u207A','-':'\u207B','n':'\u207F'};
+  const SUB_MAP={'0':'\u2080','1':'\u2081','2':'\u2082','3':'\u2083','4':'\u2084','5':'\u2085','6':'\u2086','7':'\u2087','8':'\u2088','9':'\u2089','+':'\u208A','-':'\u208B'};
+  function applyScriptShorthand(text){
+    return String(text)
+      .replace(/\^\(([^)]+)\)/g,(m,g)=>[...g].map(ch=>SUP_MAP[ch]||ch).join(''))
+      .replace(/_\(([^)]+)\)/g,(m,g)=>[...g].map(ch=>SUB_MAP[ch]||ch).join(''))
+      .replace(/\^([0-9+\-n])/g,(m,ch)=>SUP_MAP[ch]||m)
+      .replace(/_([0-9+\-])/g,(m,ch)=>SUB_MAP[ch]||m);
+  }
+
+  function tokenizeFormula(text){
+    const tokens=[];
+    let i=0;
+    while(i<text.length){
+      const ch=text[i];
+      if(/\s/.test(ch)){i++;continue;}
+      if(/[0-9.]/.test(ch)){
+        let j=i;
+        while(j<text.length&&/[0-9.]/.test(text[j])) j++;
+        // Allow scientific notation such as 1.2e-3.
+        if(j<text.length&&/[eE]/.test(text[j])&&/[0-9+\-]/.test(text[j+1]||'')){
+          j++;
+          if(/[+\-]/.test(text[j])) j++;
+          while(j<text.length&&/[0-9]/.test(text[j])) j++;
+        }
+        const value=Number(text.slice(i,j));
+        if(!Number.isFinite(value)) throw new Error(`Bad number "${text.slice(i,j)}"`);
+        tokens.push({type:'num',value});
+        i=j;continue;
+      }
+      if(IDENT_START.test(ch)){
+        let j=i;
+        while(j<text.length&&IDENT_PART.test(text[j])) j++;
+        tokens.push({type:'name',value:text.slice(i,j)});
+        i=j;continue;
+      }
+      if('+-*/^(),'.includes(ch)){tokens.push({type:ch});i++;continue;}
+      throw new Error(`Unexpected character "${ch}"`);
+    }
+    return tokens;
+  }
+
+  // Reads an aggregate out of the per-row bundle prepared by tableRows().
+  function aggregateValue(scope,columnName,fnName){
+    if(!columnName) return NaN;
+    const bundle=scope&&scope.__agg;
+    const col=bundle&&bundle[columnName];
+    if(!col) return NaN;
+    const v=col[fnName];
+    return Number.isFinite(v)?v:NaN;
+  }
+
+  function compileFormula(text){
+    const tokens=tokenizeFormula(text);
+    const columnRefs=new Set();
+    const aggregateRefs=new Set();
+    const bareAggregates=[];
+    let pos=0;
+    const peek=()=>tokens[pos];
+    const eat=type=>{
+      if(!tokens[pos]||tokens[pos].type!==type) throw new Error(`Expected ${type}`);
+      return tokens[pos++];
+    };
+
+    function parseExpression(){
+      let node=parseTerm();
+      while(peek()&&(peek().type==='+'||peek().type==='-')){
+        const op=tokens[pos++].type;
+        const rhs=parseTerm();
+        const left=node;
+        node=op==='+'?(s=>left(s)+rhs(s)):(s=>left(s)-rhs(s));
+      }
+      return node;
+    }
+    function parseTerm(){
+      let node=parseUnary();
+      while(peek()&&(peek().type==='*'||peek().type==='/')){
+        const op=tokens[pos++].type;
+        const rhs=parseUnary();
+        const left=node;
+        node=op==='*'?(s=>left(s)*rhs(s)):(s=>left(s)/rhs(s));
+      }
+      return node;
+    }
+    function parseUnary(){
+      if(peek()&&peek().type==='-'){pos++;const n=parseUnary();return s=>-n(s);}
+      if(peek()&&peek().type==='+'){pos++;return parseUnary();}
+      return parsePower();
+    }
+    function parsePower(){
+      const base=parseAtom();
+      if(peek()&&peek().type==='^'){
+        pos++;
+        const exponent=parseUnary();   // right-associative
+        return s=>Math.pow(base(s),exponent(s));
+      }
+      return base;
+    }
+    function parseAtom(){
+      const token=peek();
+      if(!token) throw new Error('Unexpected end of formula');
+      if(token.type==='num'){pos++;return ()=>token.value;}
+      if(token.type==='('){
+        pos++;
+        const inner=parseExpression();
+        eat(')');
+        return inner;
+      }
+      if(token.type==='name'){
+        pos++;
+        const name=token.value;
+        const lower=name.toLowerCase();
+
+        if(AGGREGATES[lower]){
+          // Explicit form: first(t) - needed when a formula mentions two columns.
+          if(peek()&&peek().type==='('){
+            pos++;
+            const inner=peek();
+            if(!inner||inner.type!=='name') throw new Error(`${lower}( ) needs a column name`);
+            pos++;
+            eat(')');
+            const colName=inner.value;
+            aggregateRefs.add(colName);
+            return scope=>aggregateValue(scope,colName,lower);
+          }
+          // Bare form: t - first. Resolved after parsing, once we know which
+          // single column the formula refers to.
+          const holder={column:null};
+          bareAggregates.push({holder,fn:lower});
+          return scope=>aggregateValue(scope,holder.column,lower);
+        }
+
+        if(peek()&&peek().type==='('){
+          pos++;
+          const arg=parseExpression();
+          eat(')');
+          const fn=FORMULA_FUNCTIONS[lower];
+          if(!fn) throw new Error(`Unknown function "${name}"`);
+          return s=>fn(arg(s));
+        }
+        const constant=FORMULA_CONSTANTS[lower];
+        if(constant!==undefined) return ()=>constant;
+        columnRefs.add(name);
+        return scope=>{
+          const v=scope[name];
+          return v===undefined?NaN:v;
+        };
+      }
+      throw new Error(`Unexpected token`);
+    }
+
+    const fn=parseExpression();
+    if(pos<tokens.length) throw new Error('Unexpected trailing text');
+
+    if(bareAggregates.length){
+      const candidates=[...columnRefs];
+      if(candidates.length===0){
+        throw new Error(`${bareAggregates[0].fn} needs a column — write ${bareAggregates[0].fn}(t)`);
+      }
+      if(candidates.length>1){
+        throw new Error(
+          `${bareAggregates[0].fn} is ambiguous here — write ${bareAggregates[0].fn}(${candidates[0]}) or ${bareAggregates[0].fn}(${candidates[1]})`);
+      }
+      bareAggregates.forEach(b=>{b.holder.column=candidates[0];});
+      aggregateRefs.add(candidates[0]);
+    }
+
+    fn.columnRefs=[...columnRefs];
+    fn.aggregateRefs=[...aggregateRefs];
+    return fn;
   }
 
   // ---- Curve fitting --------------------------------------------------
@@ -1604,8 +2178,10 @@
   }
 
   // Builds the fit for whatever is currently plotted and selected.
+  // A fit belongs to one pairing of columns, so the pair is its key.
+  function plotKey(){ return `${state.axisY}|${state.axisX}`; }
   function fitModelFor(type){ return state.fitModels[type]||'none'; }
-  function currentFitModel(){ return fitModelFor($('graphSelect').value); }
+  function currentFitModel(){ return fitModelFor(plotKey()); }
 
   function computeFit(xs,ys){
     const model=currentFitModel();
@@ -1649,22 +2225,173 @@
     return {fn:f.fn,equation,extra,r2:rSquared(xs,ys,f.fn)};
   }
 
+  // ---- Column model ---------------------------------------------------
+  // Both modes produce the same shape: a list of column definitions and a list
+  // of row objects keyed by column name. Everything downstream - table, plot,
+  // brush, fit, export - reads only this.
+  // Every column has a stable id. Names are display labels that a student can
+  // change; ids are what the axis pickers, fit keys and delete button hold, so a
+  // rename never loses your plot or your fit.
+  let columnIdSeq=1;
+  function newColumnId(prefix){ return prefix+'_'+(columnIdSeq++); }
+
+  // One workspace. Video-derived columns appear once there is something tracked;
+  // pasted columns always appear. A paste no longer moves you anywhere.
+  function baseColumns(){
+    const pasted=state.dataColumns.map(c=>({id:c.id,name:c.name,unit:c.unit||'',kind:'data'}));
+    if(!state.points.length) return pasted;
+    const unit=state.calibration?.unit||'px';
+    // The frame index is no longer shown: since timestamps are measured, it is a
+    // stepping detail rather than data, and it was meaningless beside pasted rows.
+    return [
+      {id:'vid_t',name:'t',unit:'s',kind:'video'},
+      {id:'vid_x',name:'x',unit:unit,kind:'video'},
+      {id:'vid_y',name:'y',unit:unit,kind:'video'},
+      {id:'vid_vx',name:'vx',unit:unit+'/s',kind:'video'},
+      {id:'vid_vy',name:'vy',unit:unit+'/s',kind:'video'}
+      // No speed column: it is sqrt(vx^2 + vy^2), which is a one-line computed
+      // column if a student wants it.
+    ].concat(pasted);
+  }
+
+  function allColumns(){
+    return baseColumns().concat(
+      state.computedColumns.map(c=>({id:c.id,name:c.name,unit:c.unit||'',kind:'computed',formula:c.formula}))
+    );
+  }
+  function columnById(id){ return allColumns().find(c=>c.id===id)||null; }
+  function nameForId(id){ const c=columnById(id); return c?c.name:null; }
+
+  // Rows are aligned by index. A pasted subset is shorter than the tracked run,
+  // so the table is ragged - which is honest, and is exactly what copying "only
+  // the free-fall rows" into new columns produces.
+  function baseRows(){
+    const tracked=state.points.length?computed():[];
+    const pastedLength=state.dataColumns.reduce((m,c)=>Math.max(m,c.values.length),0);
+    const n=Math.max(tracked.length,pastedLength);
+    const rows=[];
+    for(let i=0;i<n;i++){
+      const base=tracked[i];
+      const row=base?{...base}:{frame:i};
+      row.__index=i;
+      if(!base) row.frame=(tracked.length?tracked.length+i:i);
+      state.dataColumns.forEach(c=>{
+        row[c.name]=(i<c.values.length)?c.values[i]:NaN;
+      });
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  // Adds computed columns on top. Each is evaluated against the row it belongs
+  // to, so a formula may reference base columns and earlier computed ones.
+  // Aggregates for one column, from whatever finite values it currently holds.
+  function aggregatesFor(rows,columnName){
+    const vals=[];
+    rows.forEach(r=>{ const v=r[columnName]; if(Number.isFinite(v)) vals.push(v); });
+    const out={};
+    AGGREGATE_NAMES.forEach(n=>{ out[n]=AGGREGATES[n](vals); });
+    return out;
+  }
+
+  function tableRows(){
+    const rows=baseRows();
+    state.computedColumns.forEach(col=>{
+      let fn=null;
+      try{ fn=compileFormula(col.formula); }catch{ fn=null; }
+
+      // Whole-column values are computed once per column, from the data as it
+      // stands after every earlier computed column has been filled in.
+      let bundle=null;
+      if(fn&&fn.aggregateRefs&&fn.aggregateRefs.length){
+        bundle={};
+        fn.aggregateRefs.forEach(name=>{
+          // A column cannot be defined in terms of an aggregate of itself.
+          bundle[name]=(name===col.name)?null:aggregatesFor(rows,name);
+        });
+      }
+
+      rows.forEach(row=>{
+        if(!fn){row[col.name]=NaN;return;}
+        try{
+          if(bundle) row.__agg=bundle;
+          const v=fn(row);
+          row[col.name]=Number.isFinite(v)?v:NaN;
+        }catch{ row[col.name]=NaN; }
+        finally{ if(bundle) delete row.__agg; }
+      });
+    });
+    return rows;
+  }
+
+  // Units go through the same shorthand as names, so m/s^2 displays as m/s².
+  function formatUnit(unit){
+    return unit?applyScriptShorthand(String(unit)):'';
+  }
+  function columnLabel(col){
+    const unit=formatUnit(col.unit);
+    return unit?`${col.name} (${unit})`:col.name;
+  }
+  function findColumn(name){
+    return allColumns().find(c=>c.name===name)||null;
+  }
+
+  // Keeps the axis pickers populated and pointing at columns that still exist.
+  function refreshAxisPickers(){
+    const cols=allColumns();
+    const ids=cols.map(c=>c.id);
+    const pick=(current,preferred,fallbackIndex)=>{
+      if(ids.includes(current)) return current;
+      const wanted=cols.find(c=>c.name===preferred);
+      if(wanted) return wanted.id;
+      return ids[fallbackIndex]||ids[0]||'';
+    };
+    state.axisX=pick(state.axisX,'t',0);
+    state.axisY=pick(state.axisY,'y',1);
+    // The fit is stored per column pair, so the dropdown has to follow the pair.
+    // It used to keep showing the previous plot's model, and re-picking that same
+    // entry fires no change event - which is why a fit sometimes "did nothing"
+    // until you selected something else and came back.
+    const wantedFit=currentFitModel();
+    if($('fitSelect').value!==wantedFit) $('fitSelect').value=wantedFit;
+
+    [['axisXSelect',state.axisX],['axisYSelect',state.axisY]].forEach(([elId,current])=>{
+      const sel=$(elId);
+      const wanted=cols.map(c=>`<option value="${c.id}">${columnLabel(c)}</option>`).join('');
+      if(sel.dataset.sig!==wanted){ sel.innerHTML=wanted; sel.dataset.sig=wanted; }
+      sel.value=current;
+    });
+  }
+
   // ---- Selection ------------------------------------------------------
   function selectionSet(){
-    return state.selection ? new Set(state.selection) : null;
+    const sel=currentSelection();
+    return sel ? new Set(sel) : null;
+  }
+  // A pair nobody has brushed has no selection, which means every point is
+  // active - so a fresh plot fits all of its data rather than inheriting a
+  // subset chosen for a different pair.
+  function currentSelection(){
+    const key=plotKey();
+    return Object.prototype.hasOwnProperty.call(state.selections,key)
+      ? state.selections[key]
+      : null;
   }
   function isSelected(row,set){
     return set===null || set.has(row.frame);
   }
   function selectionCount(){
-    return state.selection ? state.selection.length : 0;
+    const sel=currentSelection();
+    return sel ? sel.length : 0;
   }
   function setSelection(frames){
-    const before=state.selection?[...state.selection]:null;
-    state.selection=(frames&&frames.length)?frames:null;
-    const after=state.selection?[...state.selection]:null;
-    if(JSON.stringify(before)!==JSON.stringify(after)){
-      pushAction({type:'selection',before,after});
+    const key=plotKey();
+    const before=clone(state.selections);
+    const value=(frames&&frames.length)?frames:null;
+    if(value) state.selections[key]=value; else delete state.selections[key];
+    state.selection=value;        // kept for saving legacy-compatible projects
+    if(JSON.stringify(before)!==JSON.stringify(state.selections)){
+      pushAction({type:'selection',before,after:clone(state.selections)});
     }
     updateSelectionBar();
     scheduleOutputs();
@@ -1672,32 +2399,32 @@
   function clearSelection(){ setSelection(null); }
   // Points removed from the data should not linger in the selection.
   function pruneSelection(){
-    if(!state.selection) return;
-    const live=new Set(state.points.map(p=>p.frame));
-    const kept=state.selection.filter(f=>live.has(f));
-    state.selection=kept.length?kept:null;
+    const live=new Set(tableRows().map(r=>r.frame));
+    Object.keys(state.selections).forEach(key=>{
+      const kept=state.selections[key].filter(f=>live.has(f));
+      if(kept.length) state.selections[key]=kept; else delete state.selections[key];
+    });
+    if(state.selection){
+      const kept=state.selection.filter(f=>live.has(f));
+      state.selection=kept.length?kept:null;
+    }
     updateSelectionBar();
   }
-  function updateFitPanel(fit,fitted,total){
-    const panel=$('fitPanel');
-    if(currentFitModel()==='none'||!fit){ panel.classList.add('hidden'); return; }
-    if(fit.error){
-      panel.innerHTML=`<div class="fit-warn">${fit.error}</div>`;
-      panel.classList.remove('hidden');
-      return;
-    }
-    const r2=fit.r2==null?'—':fit.r2.toFixed(4);
-    panel.innerHTML=
-      `<div class="fit-eq">${fit.equation}</div>`+
-      (fit.extra?`<div class="fit-meta">${fit.extra}</div>`:'')+
-      `<div class="fit-meta">R² = ${r2} &nbsp;·&nbsp; n = ${fitted} of ${total}</div>`;
-    panel.classList.remove('hidden');
+  // The readout now lives on the canvas so that any copy - Ctrl+C, right-click
+  // "Copy image", a screenshot - includes it. This keeps the old element out of
+  // the way rather than leaving two competing readouts on screen.
+  // The fit readout is drawn on the canvas so that any copy - Ctrl+C,
+  // right-click "Copy image", a screenshot - carries it. The old HTML overlay
+  // stays hidden rather than duplicating it on screen.
+  function updateFitPanel(){
+    $('fitPanel').classList.add('hidden');
   }
 
   function updateSelectionBar(){
     const bar=$('selectionBar');
-    if(!state.selection){ bar.classList.add('hidden'); return; }
-    $('selectionCount').textContent=`${state.selection.length} of ${state.points.length} points selected`;
+    const sel=currentSelection();
+    if(!sel){ bar.classList.add('hidden'); return; }
+    $('selectionCount').textContent=`${sel.length} of ${tableRows().length} rows selected`;
     bar.classList.remove('hidden');
   }
 
@@ -1718,17 +2445,15 @@
     };
   }
   function currentGraphData(){
-    const rows=computed();
-    const mode=$('graphSelect').value;
+    const rows=tableRows();
     if(!rows.length)return null;
-    let xs,ys,h='t',v='y';
-    if(mode==='trajectory'){xs=rows.map(r=>r.x);ys=rows.map(r=>r.y);h='x';v='y';}
-    else {
-      xs=rows.map(r=>r.t);
-      ys=rows.map(r=>mode==='x'?r.x:mode==='y'?r.y:mode==='vx'?r.vx:mode==='vy'?r.vy:r.speed);
-      h='t';v=mode;
-    }
-    return {xs,ys,h,v};
+    const hx=nameForId(state.axisX), vy=nameForId(state.axisY);
+    if(!hx||!vy) return null;
+    return {
+      xs:rows.map(r=>r[hx]),
+      ys:rows.map(r=>r[vy]),
+      h:hx, v:vy
+    };
   }
   function updateLimitLabels(){
     const d=currentGraphData();
@@ -1736,8 +2461,8 @@
     $('hScaleLabel').textContent=`${h} axis`;
     $('vScaleLabel').textContent=`${v} axis`;
   }
-  function populateLimitInputs(){
-    const r=state.graphLimits;
+  function populateLimitInputs(limits){
+    const r=limits||state.graphLimits;
     $('xMin').value=Number.isFinite(r.xmin)?Number(r.xmin.toPrecision(6)):'';
     $('xMax').value=Number.isFinite(r.xmax)?Number(r.xmax.toPrecision(6)):'';
     $('yMin').value=Number.isFinite(r.ymin)?Number(r.ymin.toPrecision(6)):'';
@@ -1770,51 +2495,48 @@
   }
 
   function drawGraph(){
-    const rows=computed(), type=$('graphSelect').value;
+    refreshAxisPickers();
+    drawGraphInto(graph.clientWidth,graph.clientHeight);
+  }
+
+  function drawGraphInto(Wcss,Hcss){
+    const rows=tableRows();
+    const type=plotKey();
     const set=selectionSet();
     const flags=rows.map(r=>isSelected(r,set));
     const highlight=tableSelectedFrames();
     const highlighted=rows.map(r=>highlight?highlight.has(r.frame):false);
     plottedRows=rows;
-    const Wcss=graph.clientWidth,Hcss=graph.clientHeight;
     gctx.clearRect(0,0,Wcss,Hcss);
-    gctx.fillStyle='#f8fafc';
+    gctx.fillStyle=exportTheme?'#ffffff':'#f8fafc';
     gctx.fillRect(0,0,Wcss,Hcss);
     if(rows.length===0){
       gctx.fillStyle='#475569';
       gctx.font='600 20px system-ui, -apple-system, Segoe UI, sans-serif';
       gctx.textAlign='center';
       gctx.textBaseline='middle';
-      gctx.fillText('Add a tracked point.',Wcss/2,Hcss/2);
+      gctx.fillText(
+        state.showVideo ? 'Track a point, or paste some data.' : 'Paste some data to plot.',
+        Wcss/2,Hcss/2);
       lastPlot=null;
       return;
     }
 
-    let xs,ys,xlab,ylab,title,color,pointColor;
-    const unit=state.calibration?.unit||'px';
-
-    if(type==='trajectory'){
-      xs=rows.map(r=>r.x);ys=rows.map(r=>r.y);
-      xlab=`x (${unit})`;ylab=`y (${unit})`;
-      title='y vs x';
-      color='#64748b';
-      pointColor='#38bdf8';
-    }else{
-      xs=rows.map(r=>r.t);
-      ys=rows.map(r=>r[type]);
-      xlab='t (s)';
-      ylab=type+(type.startsWith('v')||type==='speed'?` (${unit}/s)`:` (${unit})`);
-      title=`${type} vs t`;
-
-      if(type==='x'||type==='vx'){
-        color='#38bdf8';
-      }else if(type==='y'||type==='vy'){
-        color='#22c55e';
-      }else{
-        color='#c084fc';
-      }
-      pointColor=color;
+    const colX=columnById(state.axisX), colY=columnById(state.axisY);
+    if(!colX||!colY){
+      gctx.fillStyle='#475569';
+      gctx.font='600 18px system-ui, -apple-system, Segoe UI, sans-serif';
+      gctx.textAlign='center';gctx.textBaseline='middle';
+      gctx.fillText('Choose columns to plot.',Wcss/2,Hcss/2);
+      lastPlot=null;
+      return;
     }
+    const xs=rows.map(r=>r[colX.name]);
+    const ys=rows.map(r=>r[colY.name]);
+    const xlab=columnLabel(colX), ylab=columnLabel(colY);
+    const title=`${colY.name} vs ${colX.name}`;
+    const color=SERIES_COLORS[colY.name]||(colY.kind==='computed'?'#c084fc':'#38bdf8');
+    const pointColor=color;
 
     // Fit only what is selected; with no selection that is every point.
     const fitXs=[],fitYs=[];
@@ -1822,9 +2544,10 @@
       if(flags[i]&&Number.isFinite(x)&&Number.isFinite(ys[i])){fitXs.push(x);fitYs.push(ys[i]);}
     });
     const fit=computeFit(fitXs,fitYs);
+    if(fit&&!fit.error) fit.n=fitXs.length;
     updateFitPanel(fit,fitXs.length,rows.length);
 
-    plot(xs,ys,xlab,ylab,{title,color,pointColor},flags,highlighted,fit);
+    plot(xs,ys,xlab,ylab,{title,color,pointColor},flags,highlighted,fit,Wcss,Hcss);
   }
 
   function niceNumber(value,round){
@@ -1875,11 +2598,21 @@
   // The splitter cannot reach this state, but shrinking the window can.
   const MIN_PLOT_W=70, MIN_PLOT_H=60;
   // Set by plot(); the brush needs the same pixel mapping the renderer used.
+  // The point just placed sits under the cursor, so labelling it would put text
+  // on screen after every click. Its label stays off until the pointer leaves
+  // it - then hovering it again is a deliberate question about that point.
+  let labelSuppressedFor=-1;
+  let pointerOverGraph=false;
+  let graphFocused=false;
+  const SERIES_COLORS={x:'#38bdf8',vx:'#38bdf8',y:'#22c55e',vy:'#22c55e'};
   let lastPlot=null;
+  // Where the fit readout sits, as a fraction of the canvas, plus its last drawn
+  // rectangle for hit-testing. Fractions so it survives a resize.
+  let fitBoxPos=null, fitBoxRect=null, fitBoxHot=false;
   // Row order as last plotted, so a brush hit maps back to the right frames.
   let plottedRows=[];
-  function plot(xs,ys,xlab,ylab,style,flags,highlighted,fit){
-    const W=graph.clientWidth,H=graph.clientHeight,m={l:88,r:28,t:30,b:72};
+  function plot(xs,ys,xlab,ylab,style,flags,highlighted,fit,plotW,plotH){
+    const W=plotW,H=plotH,m={l:88,r:28,t:30,b:72};
     if(W-m.l-m.r<MIN_PLOT_W || H-m.t-m.b<MIN_PLOT_H){
       gctx.fillStyle='#64748b';
       gctx.font='600 14px system-ui, -apple-system, Segoe UI, sans-serif';
@@ -1908,11 +2641,15 @@
 
     // For autoscaled graphs, expand the plotted bounds to the nice tick bounds.
     // Preserve exact user-entered manual bounds.
+    //
+    // Crucially these expanded bounds are NOT written back to state.graphLimits.
+    // Doing so fed the widened range into the next tick calculation, which could
+    // pick a coarser step and redraw the axis differently - the graph appeared
+    // to rescale itself the first time anything triggered a repaint.
     if(!state.graphLimitsManual){
       xmin=xTicks.min; xmax=xTicks.max;
       ymin=yTicks.min; ymax=yTicks.max;
-      state.graphLimits={xmin,xmax,ymin,ymax};
-      populateLimitInputs();
+      populateLimitInputs({xmin,xmax,ymin,ymax});
     }
 
     const px=x=>m.l+(x-xmin)/(xmax-xmin)*(W-m.l-m.r);
@@ -2022,6 +2759,55 @@
       gctx.restore();
     }
 
+    // In the exported image the fit panel is not there - it is an HTML overlay -
+    // so the equation is drawn onto the canvas instead. A copied graph should be
+    // able to stand alone in a lab report.
+    if(fit&&!fit.error&&fit.equation){
+      const lines=[fit.equation];
+      if(fit.extra) lines.push(fit.extra);
+      const r2=fit.r2==null?null:fit.r2.toFixed(4);
+      lines.push('R\u00B2 = '+(r2===null?'\u2014':r2)+'   n = '+(fit.n!=null?fit.n:''));
+
+      gctx.save();
+      gctx.textAlign='left';
+      gctx.textBaseline='top';
+      const pad=9, lh=19;
+      gctx.font='600 15px ui-monospace, SFMono-Regular, Menlo, monospace';
+      let boxW=0;
+      lines.forEach((t,i)=>{
+        gctx.font=i===0
+          ? '600 15px ui-monospace, SFMono-Regular, Menlo, monospace'
+          : '13px system-ui, -apple-system, Segoe UI, sans-serif';
+        boxW=Math.max(boxW,gctx.measureText(t).width);
+      });
+      const boxH=lines.length*lh+pad*2-4;
+      // Default top-right of the plot area, where data least often reaches;
+      // the student can drag it anywhere inside the plot.
+      const defaultX=W-m.r-boxW-pad*2, defaultY=m.t+8;
+      const boxWFull=boxW+pad*2;
+      let bx=fitBoxPos?fitBoxPos.x*W:defaultX;
+      let by=fitBoxPos?fitBoxPos.y*H:defaultY;
+      bx=Math.max(m.l+2,Math.min(bx,W-m.r-boxWFull));
+      by=Math.max(m.t+2,Math.min(by,H-m.b-boxH));
+      gctx.fillStyle='rgba(255,255,255,.93)';
+      gctx.strokeStyle=fitBoxHot?'#f59e0b':'#cbd5e1';
+      gctx.lineWidth=fitBoxHot?2:1;
+      gctx.beginPath();
+      gctx.rect(bx,by,boxW+pad*2,boxH);
+      gctx.fill();
+      gctx.stroke();
+      lines.forEach((t,i)=>{
+        gctx.font=i===0
+          ? '600 15px ui-monospace, SFMono-Regular, Menlo, monospace'
+          : '13px system-ui, -apple-system, Segoe UI, sans-serif';
+        gctx.fillStyle=i===0?'#b45309':'#475569';
+        gctx.fillText(t,bx+pad,by+pad+i*lh);
+      });
+      gctx.restore();
+      // Remembered so the pointer code can hit-test it for dragging.
+      fitBoxRect={x:bx,y:by,w:boxW+pad*2,h:boxH};
+    }
+
     // Expose the mapping so the brush can convert pixels back to data.
     lastPlot={px,py,xmin,xmax,ymin,ymax,m,W,H};
 
@@ -2071,14 +2857,28 @@
   }
 
   function saveProject(){
-    const payload={format:'Manual Video Analysis Project',version:1,video:{name:state.videoName,size:state.videoSize,duration:state.videoDuration,width:video.videoWidth||null,height:video.videoHeight||null},fps:state.fps,stride:state.stride,calibration:state.calibration,calibrationVisible:state.calibrationVisible,origin:state.origin,angle:state.angle,axesVisible:state.axesVisible,points:state.points,selection:state.selection,fitModels:state.fitModels,pointDisplay:state.pointDisplay,recentCount:state.recentCount,autoAdvance:state.autoAdvance,timeOrigin:state.timeOrigin,graphLimits:state.graphLimits,graphLimitsManual:state.graphLimitsManual};
+    const payload={format:'Manual Video Analysis Project',version:1,video:{name:state.videoName,size:state.videoSize,duration:state.videoDuration,width:video.videoWidth||null,height:video.videoHeight||null},fps:state.fps,stride:state.stride,calibration:state.calibration,calibrationVisible:state.calibrationVisible,origin:state.origin,angle:state.angle,axesVisible:state.axesVisible,points:state.points,pointColor:state.pointColor,selection:state.selection,selections:state.selections,fitModels:state.fitModels,showVideo:state.showVideo,graphWidth:state.graphWidth,columnWidths:state.columnWidths,dataColumns:state.dataColumns,computedColumns:state.computedColumns,axisX:state.axisX,axisY:state.axisY,pointDisplay:state.pointDisplay,recentCount:state.recentCount,autoAdvance:state.autoAdvance,timeOrigin:state.timeOrigin,graphLimits:state.graphLimits,graphLimitsManual:state.graphLimitsManual};
     download(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),(state.videoName.replace(/\.[^.]+$/,'')||'video-analysis')+'.mva');
   }
   function loadProject(file){
     const fr=new FileReader();
     fr.onload=()=>{try{
       const p=JSON.parse(fr.result);
-      state.fps=p.fps||30;state.stride=p.stride||1;state.calibration=p.calibration||null;state.calibrationVisible=p.calibrationVisible!==false;state.origin=p.origin||state.origin;state.angle=p.angle||0;state.axesVisible=p.axesVisible!==false;state.points=p.points||[];state.selection=Array.isArray(p.selection)&&p.selection.length?p.selection:null;state.fitModels=(p.fitModels&&typeof p.fitModels==='object')?p.fitModels:(p.fitModel&&p.fitModel!=='none'?{y:p.fitModel}:{});state.pointDisplay=p.pointDisplay||'recent';state.recentCount=p.recentCount||5;state.autoAdvance=p.autoAdvance!==false;state.timeOrigin=p.timeOrigin||'first';state.graphLimits=p.graphLimits||state.graphLimits;state.graphLimitsManual=Boolean(p.graphLimitsManual);
+      state.fps=p.fps||30;state.stride=p.stride||1;state.calibration=p.calibration||null;state.calibrationVisible=p.calibrationVisible!==false;state.origin=p.origin||state.origin;state.angle=p.angle||0;state.axesVisible=p.axesVisible!==false;state.points=p.points||[];state.selection=Array.isArray(p.selection)&&p.selection.length?p.selection:null;
+      state.selections=(p.selections&&typeof p.selections==='object')?p.selections:{};
+      // Projects saved before selections were per-pair carried one global list;
+      // attach it to the pair that was on screen when they saved.
+      if(!p.selections&&Array.isArray(p.selection)&&p.selection.length&&p.axisY&&p.axisX){
+        state.selections[`${p.axisY}|${p.axisX}`]=p.selection;
+      }state.fitModels=(p.fitModels&&typeof p.fitModels==='object')?p.fitModels:{};
+      state.showVideo=p.showVideo!==false;
+      state.columnWidths=(p.columnWidths&&typeof p.columnWidths==='object')?p.columnWidths:{};
+      state.graphWidth=Number.isFinite(p.graphWidth)?p.graphWidth:100;
+      state.dataColumns=(Array.isArray(p.dataColumns)?p.dataColumns:[])
+        .map(c=>({...c,id:c.id||newColumnId('data')}));
+      state.computedColumns=(Array.isArray(p.computedColumns)?p.computedColumns:[])
+        .map(c=>({...c,id:c.id||newColumnId('calc')}));
+      state.axisX=p.axisX||'t';state.axisY=p.axisY||'y';state.pointDisplay=p.pointDisplay||'recent';state.pointColor=p.pointColor||'#ef4444';state.recentCount=p.recentCount||5;state.autoAdvance=p.autoAdvance!==false;state.timeOrigin=p.timeOrigin||'first';state.graphLimits=p.graphLimits||state.graphLimits;state.graphLimitsManual=Boolean(p.graphLimitsManual);
       fpsWasUserSet=true;
       $('fpsInput').value=state.fps;$('strideInput').value=state.stride;$('pointDisplay').value=state.pointDisplay;$('autoAdvance').value=state.autoAdvance?'1':'0';$('timeOrigin').value=state.timeOrigin;populateLimitInputs();updateLimitLabels();
       // The calibration fields showed stale values after a load, and editing one
@@ -2086,6 +2886,7 @@
       syncCalibrationInputs();
       pruneSelection();
       updateSelectionBar();
+      renderSwatches();
       $('fitSelect').value=currentFitModel();
       state.expectedVideo=p.video||null;
       draw();
@@ -2108,6 +2909,9 @@
     active:false,
     anchor:null,
     focus:null,
+    // Ctrl/Cmd-dragging adds another rectangle rather than replacing the first,
+    // so two separate blocks can be copied together.
+    ranges:[],
     selectedColumns:new Set(),
     lastHeaderColumn:null,
     suppressNextClick:false
@@ -2135,17 +2939,54 @@
     // A whole-column selection covers every row, which is the same as no
     // highlight at all - so treat it as nothing rather than lighting up all.
     if(tableSelection.selectedColumns.size) return null;
-    if(!tableSelection.anchor||!tableSelection.focus) return null;
-    const r1=Math.min(tableSelection.anchor.row,tableSelection.focus.row);
-    const r2=Math.max(tableSelection.anchor.row,tableSelection.focus.row);
+
+    // Table column index -> column definition. Index 0 is the row-number gutter.
+    const cols=allColumns();
+    const isPlotted=index=>{
+      const col=cols[index-1];
+      return !!col && (col.id===state.axisX || col.id===state.axisY);
+    };
+
+    // Only a selection that touches a column actually on the graph highlights
+    // anything. A pasted subset sits at the top of the table, so its row 3 is
+    // not the same measurement as row 3 of the original run - highlighting the
+    // plotted point for that row would assert a correspondence that does not
+    // exist. Tested per rectangle, so an extra Ctrl-dragged block in an
+    // unplotted column cannot bring those rows back in.
     const frames=new Set();
-    for(let r=r1;r<=r2;r++){
-      // Row 0 is the header; body rows start at 1.
-      if(r===0) continue;
-      const f=frameOf(r-1);
-      if(f!==null) frames.add(f);
-    }
+    allRanges().forEach(range=>{
+      let touchesPlotted=false;
+      for(let c=range.c1;c<=range.c2;c++){
+        if(isPlotted(c)){ touchesPlotted=true; break; }
+      }
+      if(!touchesPlotted) return;
+      for(let r=range.r1;r<=range.r2;r++){
+        // Row 0 is the header; body rows start at 1.
+        if(r===0) continue;
+        const f=frameOf(r-1);
+        if(f!==null) frames.add(f);
+      }
+    });
     return frames.size?frames:null;
+  }
+
+  function activeRange(){
+    if(!tableSelection.anchor||!tableSelection.focus) return null;
+    return {
+      r1:Math.min(tableSelection.anchor.row,tableSelection.focus.row),
+      r2:Math.max(tableSelection.anchor.row,tableSelection.focus.row),
+      c1:Math.min(tableSelection.anchor.col,tableSelection.focus.col),
+      c2:Math.max(tableSelection.anchor.col,tableSelection.focus.col)
+    };
+  }
+  function allRanges(){
+    const list=tableSelection.ranges.slice();
+    const active=activeRange();
+    if(active) list.push(active);
+    return list;
+  }
+  function rangesContain(list,row,col){
+    return list.some(r=>row>=r.r1&&row<=r.r2&&col>=r.c1&&col<=r.c2);
   }
 
   function tableCellAt(row,col){
@@ -2159,6 +3000,45 @@
     $('dataTab').querySelectorAll('.cell-selected,.selection-anchor').forEach(cell=>{
       cell.classList.remove('cell-selected','selection-anchor');
     });
+  }
+
+  // While dragging a selection, nudge the table when the pointer nears an edge
+  // so a range can extend past what is currently on screen.
+  let autoScrollTimer=null, autoScrollSpeed=0;
+  function autoScrollTable(clientY){
+    const pane=$('dataTab');
+    const rect=pane.getBoundingClientRect();
+    const margin=34, maxStep=18;
+    let speed=0;
+    if(clientY<rect.top+margin){
+      speed=-maxStep*Math.min(1,(rect.top+margin-clientY)/margin);
+    }else if(clientY>rect.bottom-margin){
+      speed=maxStep*Math.min(1,(clientY-(rect.bottom-margin))/margin);
+    }
+    autoScrollSpeed=speed;
+    if(speed===0){ stopAutoScroll(); return; }
+    if(autoScrollTimer!==null) return;
+    autoScrollTimer=setInterval(()=>{
+      if(!tableSelection.active||autoScrollSpeed===0){ stopAutoScroll(); return; }
+      const before=pane.scrollTop;
+      pane.scrollTop+=autoScrollSpeed;
+      if(pane.scrollTop===before) return;   // reached an end
+      // Extend the selection to whichever row is now under the pointer.
+      const probeY=autoScrollSpeed<0?rect.top+6:rect.bottom-6;
+      const el=document.elementFromPoint(rect.left+rect.width/2,probeY);
+      const cell=el&&el.closest?el.closest('td'):null;
+      if(cell&&!cell.classList.contains('row-gutter')){
+        tableSelection.focus=tableCellPosition(cell);
+        paintTableSelection();
+      }
+    },30);
+  }
+  document.addEventListener('mousemove',e=>{
+    if(tableSelection.active) autoScrollTable(e.clientY);
+  });
+  function stopAutoScroll(){
+    if(autoScrollTimer!==null){ clearInterval(autoScrollTimer); autoScrollTimer=null; }
+    autoScrollSpeed=0;
   }
 
   function paintTableSelection(){
@@ -2182,14 +3062,14 @@
       return;
     }
 
-    if(!tableSelection.anchor||!tableSelection.focus)return;
-    const r1=Math.min(tableSelection.anchor.row,tableSelection.focus.row);
-    const r2=Math.max(tableSelection.anchor.row,tableSelection.focus.row);
-    const c1=Math.min(tableSelection.anchor.col,tableSelection.focus.col);
-    const c2=Math.max(tableSelection.anchor.col,tableSelection.focus.col);
+    const ranges=allRanges();
+    if(!ranges.length)return;
+    const r1=0, r2=ranges.reduce((m,r)=>Math.max(m,r.r2),0);
+    const c1=0, c2=ranges.reduce((m,r)=>Math.max(m,r.c2),0);
 
     for(let r=r1;r<=r2;r++){
       for(let c=c1;c<=c2;c++){
+        if(!rangesContain(ranges,r,c)) continue;
         const cell=tableCellAt(r,c);
         if(cell)cell.classList.add('cell-selected');
       }
@@ -2208,27 +3088,52 @@
       for(let row=0;row<=lastRow;row++){
         lines.push(columns.map(col=>{
           const cell=tableCellAt(row,col);
-          return cell?cell.textContent.trim():'';
+          if(!cell) return '';
+          const label=cell.querySelector?cell.querySelector('.col-label'):null;
+          return (label?label.textContent:cell.textContent).trim();
         }).join('\t'));
       }
       return lines.join('\n');
     }
 
-    if(!tableSelection.anchor||!tableSelection.focus)return '';
-    const r1=Math.min(tableSelection.anchor.row,tableSelection.focus.row);
-    const r2=Math.max(tableSelection.anchor.row,tableSelection.focus.row);
-    const c1=Math.min(tableSelection.anchor.col,tableSelection.focus.col);
-    const c2=Math.max(tableSelection.anchor.col,tableSelection.focus.col);
+    const ranges=allRanges();
+    if(!ranges.length)return '';
+    // Only the rows and columns actually selected are emitted, so two blocks
+    // that sit apart come out as one tidy block.
+    const rowSet=new Set(), colSet=new Set();
+    ranges.forEach(r=>{
+      for(let x=r.r1;x<=r.r2;x++) rowSet.add(x);
+      for(let y=r.c1;y<=r.c2;y++) colSet.add(y);
+    });
+    const rowList=[...rowSet].sort((a,b)=>a-b).filter(r=>r>0);
+    const colList=[...colSet].sort((a,b)=>a-b);
+    const r1=rowList.length?rowList[0]:1;
 
     const lines=[];
-    for(let r=r1;r<=r2;r++){
-      const values=[];
-      for(let c=c1;c<=c2;c++){
-        const cell=tableCellAt(r,c);
-        values.push(cell?cell.textContent.trim():'');
+    // Always lead with the header labels, even when the selection starts
+    // mid-table: a copied subset should know what it is, so pasting it back
+    // names the columns instead of inventing c1, c2.
+    if(r1>0){
+      const header=[];
+      for(const c of colList){
+        const cell=tableCellAt(0,c);
+        // Read the label span, not the whole cell: the remove button lives in
+        // there too and its glyph must not reach the clipboard.
+        const label=cell&&cell.querySelector?cell.querySelector('.col-label'):null;
+        header.push(label?label.textContent.trim():(cell?cell.textContent.trim():''));
       }
-      lines.push(values.join('\t'));
+      lines.push(header.join('\t'));
     }
+    rowList.forEach(r=>{
+      const values=colList.map(c=>{
+        if(!rangesContain(ranges,r,c)) return '';
+        const cell=tableCellAt(r,c);
+        if(!cell) return '';
+        // Prefer the stored value over the rounded text.
+        return cell.dataset&&cell.dataset.v?cell.dataset.v:cell.textContent.trim();
+      });
+      lines.push(values.join('\t'));
+    });
     return lines.join('\n');
   }
 
@@ -2249,6 +3154,7 @@
 
   function selectColumn(col,event){
     const additive=event.ctrlKey||event.metaKey;
+    tableSelection.ranges=[];
     const extending=event.shiftKey&&tableSelection.lastHeaderColumn!==null;
 
     tableSelection.anchor=null;
@@ -2280,6 +3186,10 @@
     table.addEventListener('mousedown',event=>{
       const cell=event.target.closest('th,td');
       if(!cell)return;
+      // Row numbers are an affordance, not data: they are never part of a
+      // selection and never end up on the clipboard.
+      if(cell.classList.contains('row-gutter')) return;
+      if(event.target.closest('.col-remove')) return;
       event.preventDefault();
       event.stopPropagation();
 
@@ -2294,6 +3204,15 @@
 
       tableSelection.selectedColumns.clear();
       tableSelection.lastHeaderColumn=null;
+      // Ctrl/Cmd keeps what is already selected and starts a second block;
+      // without it, a fresh drag replaces the selection as usual.
+      const additive=event.ctrlKey||event.metaKey;
+      if(additive){
+        const current=activeRange();
+        if(current) tableSelection.ranges.push(current);
+      }else{
+        tableSelection.ranges=[];
+      }
       tableSelection.anchor=pos;
       tableSelection.focus=pos;
       tableSelection.active=true;
@@ -2304,7 +3223,7 @@
     table.addEventListener('mouseover',event=>{
       if(!tableSelection.active)return;
       const cell=event.target.closest('td');
-      if(!cell)return;
+      if(!cell||cell.classList.contains('row-gutter'))return;
       tableSelection.focus=tableCellPosition(cell);
       paintTableSelection();
     });
@@ -2319,6 +3238,7 @@
 
     document.addEventListener('mouseup',()=>{
       tableSelection.active=false;
+      stopAutoScroll();
     });
 
     document.addEventListener('copy',event=>{
@@ -2336,12 +3256,23 @@
         tableSelection.focus=null;
         tableSelection.selectedColumns.clear();
         tableSelection.lastHeaderColumn=null;
+        tableSelection.ranges=[];
         clearTableSelection();
       }
     });
   }
 
   function tableDataAsTSV(){
+    const rows=tableRows();
+    const cols=allColumns();
+    return [cols.map(columnLabel).join('\t')]
+      .concat(rows.map(r=>cols.map(c=>{
+        const v=r[c.name];
+        return (v===undefined||v===null||(typeof v==='number'&&!Number.isFinite(v)))?'':v;
+      }).join('\t')))
+      .join('\n');
+  }
+  function tableDataAsTSV_unused(){
     const rows=computed();
     const unit=state.calibration?.unit||'px';
     const header=[
@@ -2412,9 +3343,14 @@
     return /[",\n]/.test(text)?`"${text.replace(/"/g,'""')}"`:text;
   }
   function exportCSV(){
-    const rows=computed(),u=state.calibration?.unit||'px';
-    const lines=[[`frame`,`time_s`,`x_${u}`,`y_${u}`,`vx_${u}_per_s`,`vy_${u}_per_s`,`speed_${u}_per_s`],...rows.map(r=>[r.frame,r.t,r.x,r.y,r.vx,r.vy,r.speed])];
-    download(new Blob([lines.map(r=>r.map(csvCell).join(',')).join('\n')],{type:'text/csv'}),'video-analysis.csv');
+    const rows=tableRows(), cols=allColumns();
+    const lines=[cols.map(columnLabel)].concat(
+      rows.map(r=>cols.map(c=>{
+        const v=r[c.name];
+        return (v===undefined||v===null||(typeof v==='number'&&!Number.isFinite(v)))?'':v;
+      }))
+    );
+    download(new Blob([lines.map(r=>r.map(csvCell).join(',')).join('\n')],{type:'text/csv'}),'analysis-data.csv');
   }
   function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
@@ -2560,6 +3496,24 @@
     draw();
   };
   $('clearBtn').onclick=()=>{if(confirm('Clear all tracked points?')){const before=clone(state.points);state.points=[];state.selectedIndex=-1;pushAction({type:'points',before,after:[]});draw()}};
+  // A short row of well-separated colours rather than a full picker: every
+  // option here is legible over video, which a free colour wheel cannot promise.
+  const POINT_COLORS=['#ef4444','#f59e0b','#22c55e','#38bdf8','#e879f9','#ffffff'];
+  function renderSwatches(){
+    const host=$('pointColors');
+    host.innerHTML=POINT_COLORS.map(c=>
+      `<button type="button" class="swatch${c===state.pointColor?' active':''}" data-color="${c}" style="background:${c}" title="${c}"></button>`
+    ).join('');
+  }
+  $('pointColors').addEventListener('click',e=>{
+    const btn=e.target.closest('.swatch');
+    if(!btn) return;
+    state.pointColor=btn.dataset.color;
+    renderSwatches();
+    draw();
+  });
+  renderSwatches();
+
   $('pointDisplay').onchange=e=>{
     state.pointDisplay=e.target.value;
     if(state.pointDisplay==='current'){
@@ -2591,8 +3545,8 @@
 
     state.timeOrigin=newOrigin;
 
-    const graphType=$('graphSelect').value;
-    if(state.graphLimitsManual && graphType!=='trajectory'){
+    // Only a time axis shifts when the time origin changes.
+    if(state.graphLimitsManual && nameForId(state.axisX)==='t'){
       state.graphLimits.xmin+=timeShift;
       state.graphLimits.xmax+=timeShift;
       populateLimitInputs();
@@ -2605,13 +3559,22 @@
     }
     draw();
   };
-  $('graphSelect').onchange=e=>{
+  const onAxisChange=e=>{
     e.target.blur();
-    // Show whichever model belongs to the plot being switched to.
+    if(e.target.id==='axisXSelect') state.axisX=e.target.value;
+    else state.axisY=e.target.value;
+    updateSelectionBar();
+    // The graph recomputes its faded points every draw, but the table's row
+    // classes only change when it is re-rendered - without this the table kept
+    // showing the previous plot's brush.
+    renderData();
+    // Show whichever model belongs to the pairing being switched to.
     $('fitSelect').value=currentFitModel();
     updateLimitLabels();
     autoscaleGraph();
   };
+  $('axisXSelect').onchange=onAxisChange;
+  $('axisYSelect').onchange=onAxisChange;
   $('autoscaleBtn').onclick=()=>{
     autoscaleGraph();
     $('scalePanel').classList.remove('open');
@@ -2644,9 +3607,90 @@
     state.selectedIndex=state.points.findIndex(p=>p.frame===frame);
     draw();
   });
+  // ---- Graph to clipboard ---------------------------------------------
+  // Renders a report-styled copy - white ground, black axes, larger type - and
+  // puts it on the clipboard as a PNG. Ctrl/Cmd+C, because that is the gesture
+  // people already try; no button, to keep the toolbar clean.
+  function buildExportCanvas(){
+    const scale=2;                       // crisp when pasted into a document
+    const W=900,H=620;
+    const out=document.createElement('canvas');
+    out.width=W*scale; out.height=H*scale;
+    const ctx=out.getContext('2d');
+    ctx.scale(scale,scale);
+    ctx.fillStyle='#ffffff';
+    ctx.fillRect(0,0,W,H);
+
+    const saveCanvas=graph, saveCtx=gctx;
+    const savedTheme=exportTheme;
+    try{
+      graph=out; gctx=ctx; exportTheme=true;
+      drawGraphInto(W,H);
+    }finally{
+      graph=saveCanvas; gctx=saveCtx; exportTheme=savedTheme;
+      drawGraph();
+    }
+    return out;
+  }
+
+  async function copyGraphToClipboard(){
+    try{
+      const canvas=buildExportCanvas();
+      const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+      if(!blob) throw new Error('no blob');
+      if(navigator.clipboard&&window.ClipboardItem){
+        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        toast('Graph copied — paste into your report');
+      }else{
+        throw new Error('clipboard unavailable');
+      }
+    }catch(err){
+      // Firefox and insecure origins land here; a download still gets the image
+      // into the student's hands.
+      try{
+        const canvas=buildExportCanvas();
+        canvas.toBlob(blob=>{
+          if(!blob) return;
+          const url=URL.createObjectURL(blob);
+          const a=document.createElement('a');
+          a.href=url;a.download='graph.png';a.click();
+          URL.revokeObjectURL(url);
+          toast('Clipboard unavailable — graph downloaded instead');
+        },'image/png');
+      }catch{
+        toast('Could not copy the graph');
+      }
+    }
+  }
+
+  let toastTimer=null;
+  // An optional action turns a notice into an offer. Used instead of a modal
+  // for destructive-but-undoable things: a confirm() stops the world to ask a
+  // question mid-lab, and students learn to click through those.
+  function toast(message,action){
+    const el=$('toast');
+    el.classList.toggle('toast-actionable',!!action);
+    el.textContent='';
+    const text=document.createElement('span');
+    text.textContent=message;
+    el.appendChild(text);
+    if(action){
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='toast-action';
+      btn.textContent=action.label;
+      btn.onclick=()=>{ el.classList.add('hidden'); clearTimeout(toastTimer); action.run(); };
+      el.appendChild(btn);
+    }
+    el.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    // Longer when there is something to act on - it has to outlast reading it.
+    toastTimer=setTimeout(()=>el.classList.add('hidden'),action?7000:2600);
+  }
+
   // ---- Brush selection on the graph ------------------------------------
   (function initBrush(){
-    let brushing=false, start=null, current=null;
+    let brushing=false, start=null, current=null, draggingFitBox=null;
 
     const localPoint=e=>{
       const r=graph.getBoundingClientRect();
@@ -2661,6 +3705,13 @@
     graph.addEventListener('pointerdown',e=>{
       if(!lastPlot||!plottedRows.length) return;
       const p=localPoint(e);
+      // Grabbing the fit readout moves it instead of starting a selection.
+      if(fitBoxAt(p.x,p.y)){
+        draggingFitBox={dx:p.x-fitBoxRect.x, dy:p.y-fitBoxRect.y};
+        graph.setPointerCapture(e.pointerId);
+        e.preventDefault();
+        return;
+      }
       if(!insidePlot(p)) return;
       brushing=true;start=p;current=p;
       graph.setPointerCapture(e.pointerId);
@@ -2669,6 +3720,20 @@
     });
 
     graph.addEventListener('pointermove',e=>{
+      if(draggingFitBox){
+        const p=localPoint(e);
+        const W=lastPlot?lastPlot.W:graph.clientWidth;
+        const H=lastPlot?lastPlot.H:graph.clientHeight;
+        fitBoxPos={x:(p.x-draggingFitBox.dx)/W, y:(p.y-draggingFitBox.dy)/H};
+        drawGraph();
+        return;
+      }
+      if(!brushing){
+        const hp=localPoint(e);
+        const hover=fitBoxAt(hp.x,hp.y);
+        if(hover!==fitBoxHot){ fitBoxHot=hover; drawGraph(); }
+        if(hover){ graph.style.cursor='grab'; return; }
+      }
       if(!brushing){
         if(lastPlot) graph.style.cursor=insidePlot(localPoint(e))?'crosshair':'default';
         return;
@@ -2688,25 +3753,29 @@
     });
 
     const finish=e=>{
+      if(draggingFitBox){
+        draggingFitBox=null;
+        try{graph.releasePointerCapture(e.pointerId)}catch{}
+        return;
+      }
       if(!brushing) return;
       brushing=false;
       graph.style.cursor='default';
       try{graph.releasePointerCapture(e.pointerId)}catch{}
       const dx=Math.abs(current.x-start.x), dy=Math.abs(current.y-start.y);
-      // A click that is not a drag does nothing. It used to clear the
-      // selection, which meant one stray click on the plot silently threw the
-      // chosen range away and re-fitted the whole data set. Clearing is now a
-      // deliberate act: the Clear selection button, or a double-click.
-      if(dx<4&&dy<4){ return; }
+      // A click that is not a drag changes nothing - but it must still repaint.
+      // Even a two-pixel jiggle draws a rubber band during pointermove, and
+      // returning without a redraw left that rectangle painted on the graph.
+      if(dx<4&&dy<4){ drawGraph(); return; }
 
       const x0=Math.min(start.x,current.x), x1=Math.max(start.x,current.x);
       const y0=Math.min(start.y,current.y), y1=Math.max(start.y,current.y);
-      const type=$('graphSelect').value;
       const {px,py}=lastPlot;
       const picked=[];
+      const bx=nameForId(state.axisX), by=nameForId(state.axisY);
       plottedRows.forEach(r=>{
-        const vx=(type==='trajectory')?r.x:r.t;
-        const vy=(type==='trajectory')?r.y:r[type];
+        const vx=r[bx];
+        const vy=r[by];
         if(!Number.isFinite(vx)||!Number.isFinite(vy)) return;
         const X=px(vx),Y=py(vy);
         if(X>=x0&&X<=x1&&Y>=y0&&Y<=y1) picked.push(r.frame);
@@ -2714,6 +3783,15 @@
       setSelection(picked);
       drawGraph();
     };
+    graph.addEventListener('pointerenter',()=>{pointerOverGraph=true;});
+    graph.addEventListener('pointerleave',()=>{pointerOverGraph=false;});
+    // Clicking the plot gives it focus, so Ctrl+C keeps working once the
+    // pointer moves away - hovering alone is easy to lose.
+    graph.setAttribute('tabindex','0');
+    graph.title='Click the graph, then Ctrl/Cmd+C to copy it as an image';
+    graph.addEventListener('focus',()=>{graphFocused=true;});
+    graph.addEventListener('blur',()=>{graphFocused=false;});
+    graph.addEventListener('pointerdown',()=>{try{graph.focus({preventScroll:true});}catch{}});
     graph.addEventListener('pointerup',finish);
     graph.addEventListener('pointercancel',finish);
     graph.addEventListener('dblclick',()=>{clearSelection();drawGraph();});
@@ -2721,54 +3799,555 @@
 
   // The panel floats over the plot, so it needs to be movable when it lands on
   // the data. Position is remembered for the session.
-  (function initFitPanelDrag(){
-    const panel=$('fitPanel');
-    let dragging=false, startX=0, startY=0, baseLeft=0, baseTop=0;
-
-    panel.addEventListener('pointerdown',e=>{
-      const frame=$('graphLimits').getBoundingClientRect();
-      const rect=panel.getBoundingClientRect();
-      dragging=true;
-      startX=e.clientX; startY=e.clientY;
-      baseLeft=rect.left-frame.left; baseTop=rect.top-frame.top;
-      // Switch from right/bottom anchoring to left/top so dragging is absolute.
-      panel.style.left=baseLeft+'px';
-      panel.style.top=baseTop+'px';
-      panel.style.right='auto';
-      panel.style.bottom='auto';
-      panel.classList.add('dragging');
-      panel.setPointerCapture(e.pointerId);
-      e.preventDefault();
-    });
-
-    panel.addEventListener('pointermove',e=>{
-      if(!dragging) return;
-      const frame=$('graphLimits').getBoundingClientRect();
-      const rect=panel.getBoundingClientRect();
-      // Keep it inside the graph frame so it cannot be lost off-edge.
-      const maxLeft=Math.max(0,frame.width-rect.width);
-      const maxTop=Math.max(0,frame.height-rect.height);
-      const left=Math.min(maxLeft,Math.max(0,baseLeft+e.clientX-startX));
-      const top=Math.min(maxTop,Math.max(0,baseTop+e.clientY-startY));
-      panel.style.left=left+'px';
-      panel.style.top=top+'px';
-    });
-
-    const stop=e=>{
-      if(!dragging) return;
-      dragging=false;
-      panel.classList.remove('dragging');
-      try{panel.releasePointerCapture(e.pointerId)}catch{}
-    };
-    panel.addEventListener('pointerup',stop);
-    panel.addEventListener('pointercancel',stop);
-  })();
+  // Dragging the on-canvas fit box: hit-test it before the brush claims the
+  // pointer, so grabbing the readout does not start a selection.
+  function fitBoxAt(px,py){
+    if(!fitBoxRect) return false;
+    return px>=fitBoxRect.x&&px<=fitBoxRect.x+fitBoxRect.w&&
+           py>=fitBoxRect.y&&py<=fitBoxRect.y+fitBoxRect.h;
+  }
 
   $('fitSelect').onchange=e=>{
     e.target.blur();
-    state.fitModels[$('graphSelect').value]=e.target.value;
+    state.fitModels[plotKey()]=e.target.value;
     autoscaleGraph();
   };
+
+  // ---- Modes ----------------------------------------------------------
+  // The video half is now shown or hidden, not a mode you are in.
+  const VIDEO_KEY='mva-show-video';
+  function applyGraphWidth(percent,remember){
+    state.graphWidth=clamp(percent,25,100);
+    $('graphLimits').style.setProperty('--graph-width',state.graphWidth+'%');
+    // Pointless while the video is showing: the panel is already narrow.
+    $('graphWidthHandle').classList.toggle('hidden',state.showVideo);
+    requestAnimationFrame(resizeGraphCanvas);
+  }
+
+  (function initGraphWidthHandle(){
+    const handle=$('graphWidthHandle');
+    let dragging=false;
+    handle.addEventListener('pointerdown',e=>{
+      dragging=true;
+      handle.classList.add('dragging');
+      handle.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    handle.addEventListener('pointermove',e=>{
+      if(!dragging) return;
+      const rect=$('graphLimits').getBoundingClientRect();
+      if(rect.width<=0) return;
+      applyGraphWidth(((e.clientX-rect.left)/rect.width)*100,true);
+    });
+    const stop=e=>{
+      if(!dragging) return;
+      dragging=false;
+      handle.classList.remove('dragging');
+      try{handle.releasePointerCapture(e.pointerId)}catch{}
+    };
+    handle.addEventListener('pointerup',stop);
+    handle.addEventListener('pointercancel',stop);
+    handle.addEventListener('dblclick',()=>applyGraphWidth(100,true));
+  })();
+
+  function applyVideoVisible(visible,remember){
+    state.showVideo=!!visible;
+    $('videoPanel').classList.toggle('hidden',!visible);
+    document.querySelector('.splitter').classList.toggle('hidden',!visible);
+    document.querySelector('.main').style.gridTemplateColumns=visible?'':'1fr';
+    $('toggleVideoBtn').textContent=visible?'Hide video':'Show video';
+    applyGraphWidth(visible?100:state.graphWidth,false);
+    if(remember){ try{localStorage.setItem(VIDEO_KEY,visible?'1':'0');}catch{} }
+    if(!outputSplitTouched) setGraphSplitPercent(visible?DEFAULT_VSPLIT:50);
+    refreshAxisPickers();
+    $('fitSelect').value=currentFitModel();
+    renderData();
+    autoscaleGraph();
+    requestAnimationFrame(resizeGraphCanvas);
+  }
+  $('toggleVideoBtn').onclick=()=>applyVideoVisible(!state.showVideo,true);
+
+  // ---- Paste data -----------------------------------------------------
+  // Accepts tabs, commas or runs of spaces, because students paste from
+  // spreadsheets, CSV files and each other's messages.
+  function parsePastedData(text){
+    const lines=text.replace(/\r/g,'').split('\n').filter(l=>l.trim().length);
+    if(!lines.length) throw new Error('Nothing to read.');
+    // Pick ONE delimiter for the whole paste. Splitting on any whitespace broke
+    // headers such as "t (s)" into two cells, which then showed up as phantom
+    // columns named c3, c4 and so on.
+    const hasTabs=lines.some(l=>l.includes('\t'));
+    const hasCommas=!hasTabs&&lines.some(l=>l.includes(','));
+    const delimiter = hasTabs ? '\t' : hasCommas ? ',' : /\s+/;
+    // With a whitespace delimiter a header like "y (px)" would split in two and
+    // invent a phantom column, so ignore whitespace inside parentheses.
+    const splitHeader=line=>{
+      if(hasTabs||hasCommas) return line.trim().split(delimiter).map(c=>c.trim());
+      // Whitespace-separated header: match "name" or "name (unit)" as one token,
+      // so "y_ff (px)" stays a single column instead of becoming two.
+      const found=line.trim().match(/[^\s(]+(?:\s*\([^)]*\))?/g);
+      return found?found.map(c=>c.trim()):[line.trim()];
+    };
+    const splitRow=line=>line.trim().split(delimiter).map(c=>c.trim());
+    const rows=lines.map((l,i)=>i===0?splitHeader(l):splitRow(l));
+    // Data rows decide the column count; a header is only a label for them.
+    const dataWidth=rows.length>1
+      ? Math.max(...rows.slice(1).map(r=>r.length))
+      : rows[0].length;
+    const width=Math.max(1,dataWidth);
+
+    const numeric=cells=>cells.every(c=>c!==''&&Number.isFinite(Number(c)));
+    let names,dataRows,headerCells=null;
+    if(!numeric(rows[0])){
+      headerCells=rows[0].slice(0,width);
+      names=Array.from({length:width},(_,i)=>sanitizeName(headerCells[i]||'')||('c'+(i+1)));
+      dataRows=rows.slice(1);
+    }else{
+      names=Array.from({length:width},(_,i)=>'c'+(i+1));
+      dataRows=rows;
+    }
+    if(!dataRows.length) throw new Error('No data rows found.');
+
+    // "t (s)" gives a column named t carrying the unit s.
+    const units=headerCells?headerCells.map(c=>{
+      const m=String(c).match(/\(([^)]*)\)/);
+      return m?applyScriptShorthand(m[1].trim()):'';
+    }):names.map(()=>'');
+
+    return names.map((name,i)=>({
+      name,unit:units[i]||'',
+      values:dataRows.map(r=>{
+        const v=Number(r[i]);
+        return (r[i]===undefined||r[i]===''||!Number.isFinite(v))?NaN:v;
+      })
+    }));
+  }
+  // Column names are referenced inside formulas, so they must be identifiers.
+  function sanitizeName(raw){
+    // Only a trailing "(unit)" is a unit; parentheses elsewhere belong to the
+    // script shorthand, as in t^(-1).
+    let s=String(raw).trim().replace(/\s+\([^)]*\)\s*$/,'').trim();
+    s=applyScriptShorthand(s);
+    const allowed=new RegExp('[^A-Za-z0-9_'+SUPERSCRIPTS+SUBSCRIPTS+GREEK+']','g');
+    s=s.replace(allowed,'_').replace(/^_+|_+$/g,'');
+    if(/^[0-9]/.test(s)) s='c'+s;
+    return s;
+  }
+  // A second copy of t becomes t_2, a third t_3. An existing suffix is stripped
+  // first so copies of t_2 give t_3 rather than t_2_2.
+  function uniqueName(base){
+    const taken=new Set(allColumns().map(c=>c.name));
+    if(!taken.has(base)) return base;
+    const root=base.replace(/_\d+$/,'');
+    let i=2;
+    while(taken.has(root+'_'+i)) i++;
+    return root+'_'+i;
+  }
+
+  $('pasteDataBtn').onclick=()=>{
+    $('pasteArea').value='';
+    $('pasteError').textContent='';
+    $('pastePreview').classList.add('hidden');
+    $('pastePreview').innerHTML='';
+    $('pasteDialog').classList.remove('hidden');
+    $('pasteArea').focus();
+  };
+  function renderPastePreview(){
+    const box=$('pastePreview');
+    const text=$('pasteArea').value;
+    if(!text.trim()){ box.classList.add('hidden'); box.innerHTML=''; return; }
+    let columns;
+    try{ columns=parsePastedData(text); }
+    catch(err){
+      box.classList.remove('hidden');
+      box.innerHTML=`<div class="pp-note">Could not read that: ${err.message}</div>`;
+      return;
+    }
+    const rowCount=columns.reduce((m,c)=>Math.max(m,c.values.length),0);
+    const shown=Math.min(rowCount,6);
+    const esc=s=>String(s).replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
+    let html=`<div class="pp-note">${columns.length} column${columns.length===1?'':'s'}, `+
+             `${rowCount} row${rowCount===1?'':'s'}`+
+             (rowCount>shown?` — first ${shown} shown`:'')+`</div><table><tr>`;
+    columns.forEach(c=>{
+      html+=`<th>${esc(c.name)}${c.unit?` <span class="pp-unit">(${esc(c.unit)})</span>`:''}</th>`;
+    });
+    html+='</tr>';
+    for(let i=0;i<shown;i++){
+      html+='<tr>'+columns.map(c=>{
+        const v=c.values[i];
+        return `<td>${(v===undefined||!Number.isFinite(v))?'':Number(v.toPrecision(6))}</td>`;
+      }).join('')+'</tr>';
+    }
+    box.innerHTML=html+'</table>';
+    box.classList.remove('hidden');
+  }
+  $('pasteArea').addEventListener('input',renderPastePreview);
+  $('pasteArea').addEventListener('paste',()=>setTimeout(renderPastePreview,0));
+
+  $('pasteCancelBtn').onclick=()=>$('pasteDialog').classList.add('hidden');
+  $('pasteOkBtn').onclick=()=>{
+    try{
+      const columns=parsePastedData($('pasteArea').value);
+      const snapshot=columnSnapshot();
+      const added=[];
+      columns.forEach(c=>{
+        c.name=uniqueName(c.name);
+        c.id=newColumnId('data');
+        state.dataColumns.push(c);
+        added.push(c);
+      });
+      // Plot what was just pasted, which is almost always what they want to see.
+      if(added.length){
+        state.axisX=added[0].id;
+        state.axisY=(added[1]||added[0]).id;
+      }
+      recordColumnChange(snapshot);
+      clearSelection();
+      $('pasteDialog').classList.add('hidden');
+      renderData();
+      refreshAxisPickers();
+      autoscaleGraph();
+      toast('Added '+columns.length+' column'+(columns.length===1?'':'s'));
+    }catch(err){
+      $('pasteError').textContent=err.message;
+    }
+  };
+
+  // ---- Computed columns ----------------------------------------------
+  // The dialog serves both "add" and "edit"; editingColumnId says which.
+  let editingColumnId=null;
+  function openColumnDialog(id){
+    editingColumnId=id||null;
+    const computed=id?state.computedColumns.find(c=>c.id===id):null;
+    const pasted=id&&!computed?state.dataColumns.find(c=>c.id===id):null;
+    const existing=computed||pasted;
+    $('columnName').value=existing?existing.name:'';
+    $('columnUnit').value=existing?(existing.unit||''):'';
+    $('columnFormula').value=computed?computed.formula:'';
+    $('columnError').textContent='';
+    $('columnDialogTitle').textContent=existing?'Edit column':'Computed column';
+    $('columnOkBtn').textContent=existing?'Save changes':'Add column';
+    // A pasted column holds values, not a formula, so hide that field for it.
+    $('formulaRow').classList.toggle('hidden',!!pasted);
+    // Deleting is an option while editing an existing column, never while adding.
+    $('columnDeleteBtn').classList.toggle('hidden',!existing);
+    $('columnDialog').classList.remove('hidden');
+    (computed?$('columnFormula'):$('columnName')).focus();
+    if(computed) $('columnFormula').select();
+  }
+  $('addColumnBtn').onclick=()=>openColumnDialog(null);
+  $('columnCancelBtn').onclick=()=>{editingColumnId=null;$('columnDialog').classList.add('hidden');};
+  $('columnDeleteBtn').onclick=()=>{
+    if(!editingColumnId) return;
+    const id=editingColumnId;
+    editingColumnId=null;
+    $('columnDialog').classList.add('hidden');
+    removeColumn(id);
+  };
+
+  $('dataHead').addEventListener('mousedown',e=>{
+    const btn=e.target.closest('.col-edit');
+    if(!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openColumnDialog(btn.dataset.edit);
+  },true);
+
+  $('columnOkBtn').onclick=()=>{
+    const rawName=$('columnName').value.trim();
+    const formula=$('columnFormula').value.trim();
+    const err=$('columnError');
+    if(!rawName){ err.textContent='Give the column a name.'; return; }
+    const name=sanitizeName(rawName);
+    if(!name){ err.textContent='That name cannot be used in a formula.'; return; }
+    if(AGGREGATES[name.toLowerCase()]||FORMULA_FUNCTIONS[name.toLowerCase()]){
+      err.textContent='"'+name+'" is a formula function — pick another name.'; return;
+    }
+    if(allColumns().some(c=>c.name===name&&c.id!==editingColumnId)){
+      err.textContent='There is already a column called "'+name+'".'; return;
+    }
+
+    // A pasted column carries values, not a formula, so it is settled here -
+    // before any formula parsing, which would otherwise reject the empty field.
+    const pastedTarget=editingColumnId?state.dataColumns.find(c=>c.id===editingColumnId):null;
+    if(pastedTarget){
+      const snapshotBefore=columnSnapshot();
+      const rawUnit=$('columnUnit').value.trim();
+      const result=renameColumn(editingColumnId,name+(rawUnit?' ('+rawUnit+')':''));
+      if(!result.ok){ err.textContent=result.message; return; }
+      recordColumnChange(snapshotBefore);
+      editingColumnId=null;
+      $('columnDialog').classList.add('hidden');
+      toast('Updated column "'+result.newName+'"');
+      return;
+    }
+
+    if(!formula){ err.textContent='Give the column a formula.'; return; }
+    // A formula must not reference the column it defines, or evaluating it would
+    // depend on its own result.
+    let fn;
+    // So a student can type t^2 in a formula against a column actually named t².
+    try{ fn=compileFormula(formula); }
+    catch(e){ err.textContent=e.message; return; }
+    if(editingColumnId){
+      let selfReferential=false;
+      try{
+        tokenizeFormula(formula).forEach((tk,i,all)=>{
+          const isCall=all[i+1]&&all[i+1].type==='(';
+          if(tk.type==='name'&&!isCall&&tk.value===name) selfReferential=true;
+        });
+      }catch{}
+      if(selfReferential){ err.textContent='A column cannot refer to itself.'; return; }
+    }
+    // Check it produces a number on a real row before accepting it.
+    // tableRows(), not baseRows(): a formula may legitimately reference an
+    // earlier computed column - squaring a zeroed time is exactly that - and
+    // sampling the base rows made those references look undefined.
+    const sampleRows=tableRows();
+    const sample=sampleRows[0];
+    if(sample&&!editingColumnId){
+      // Whole-column functions need their bundle here too, or a perfectly good
+      // formula like "t - first" looks like it produces nothing.
+      if(fn.aggregateRefs&&fn.aggregateRefs.length){
+        const bundle={};
+        fn.aggregateRefs.forEach(n=>{ bundle[n]=aggregatesFor(sampleRows,n); });
+        sample.__agg=bundle;
+      }
+      let value;
+      try{ value=fn(sample); }catch(e){ err.textContent=e.message; return; }
+      finally{ delete sample.__agg; }
+      if(!Number.isFinite(value)){
+        err.textContent='That formula gives no result on the first row. Check the column names.';
+        return;
+      }
+    }
+    const columnsBefore=columnSnapshot();
+    if(editingColumnId){
+      const col=state.computedColumns.find(c=>c.id===editingColumnId);
+      if(!col){ err.textContent='That column no longer exists.'; return; }
+      const oldName=col.name;
+      col.name=name;
+      col.unit=applyScriptShorthand($('columnUnit').value.trim());
+      col.formula=formula;
+      const rewritten=(oldName!==name)?rewriteFormulas(oldName,name):0;
+      recordColumnChange(columnsBefore);
+      editingColumnId=null;
+      $('columnDialog').classList.add('hidden');
+      $('dataHead').dataset.sig='\u0000';
+      renderData();
+      refreshAxisPickers();
+      autoscaleGraph();
+      toast(rewritten?('Updated "'+name+'" — rewrote '+rewritten+' formula'+(rewritten===1?'':'s'))
+                     :('Updated column "'+name+'"'));
+      return;
+    }
+    state.computedColumns.push({id:newColumnId('calc'),name,unit:applyScriptShorthand($('columnUnit').value.trim()),formula});
+    recordColumnChange(columnsBefore);
+    $('columnDialog').classList.add('hidden');
+    $('dataHead').dataset.sig='\u0000';
+    renderData();
+    refreshAxisPickers();
+    toast('Added column "'+name+'"');
+  };
+
+  // Right-click any removable column header to delete it. Video columns are
+  // derived from the tracked points, so those stay.
+  // Rewrites references to a renamed column inside every stored formula. Done
+  // on tokens, not text, so renaming T cannot corrupt T2 or a function name.
+  function rewriteFormulas(oldName,newName){
+    let touched=0;
+    state.computedColumns.forEach(col=>{
+      let tokens;
+      try{ tokens=tokenizeFormula(col.formula); }catch{ return; }
+      let changed=false;
+      const rebuilt=tokens.map((tk,i)=>{
+        if(tk.type==='num') return String(tk.value);
+        if(tk.type==='name'){
+          // A name followed by '(' is a function call, not a column.
+          const isCall=tokens[i+1]&&tokens[i+1].type==='(';
+          if(!isCall&&tk.value===oldName){ changed=true; return newName; }
+          return tk.value;
+        }
+        return tk.type;
+      }).join('');
+      if(changed){ col.formula=rebuilt; touched++; }
+    });
+    return touched;
+  }
+
+  // Column names referenced by a formula, ignoring function calls like sqrt(.
+  function formulaRefs(formula){
+    let tokens;
+    try{ tokens=tokenizeFormula(formula); }catch{ return []; }
+    const names=[];
+    tokens.forEach((tk,i,all)=>{
+      if(tk.type!=='name') return;
+      const lower=tk.value.toLowerCase();
+      if(AGGREGATES[lower]){
+        // first(t) names its column in the next token; bare first resolves to
+        // the formula's only column, which is already counted.
+        if(all[i+1]&&all[i+1].type==='('&&all[i+2]&&all[i+2].type==='name'){
+          if(!names.includes(all[i+2].value)) names.push(all[i+2].value);
+        }
+        return;
+      }
+      if(all[i+1]&&all[i+1].type==='(') return;      // a function
+      if(FORMULA_CONSTANTS[lower]!==undefined) return;
+      if(!names.includes(tk.value)) names.push(tk.value);
+    });
+    return names;
+  }
+  // Computed columns whose formula mentions the given column name.
+  function dependentsOf(name){
+    return state.computedColumns.filter(c=>formulaRefs(c.formula).includes(name));
+  }
+  // References a formula makes that no column satisfies.
+  function missingRefs(col){
+    if(!col||!col.formula) return [];
+    const known=new Set(allColumns().map(c=>c.name));
+    return formulaRefs(col.formula).filter(n=>!known.has(n));
+  }
+
+  function renameColumn(id,rawLabel){
+    const col=columnById(id);
+    if(!col||col.kind==='video') return {ok:false,message:'That column cannot be renamed.'};
+    // Accept "name (unit)" so the same shape works here as in a pasted header.
+    const match=String(rawLabel).match(/^\s*([^()]*?)\s*(?:\(([^)]*)\))?\s*$/);
+    const wantedName=sanitizeName(match?match[1]:rawLabel);
+    const wantedUnit=match&&match[2]!==undefined?applyScriptShorthand(match[2].trim()):col.unit;
+    if(!wantedName) return {ok:false,message:'That name cannot be used in a formula.'};
+    if(AGGREGATES[wantedName.toLowerCase()]||FORMULA_FUNCTIONS[wantedName.toLowerCase()])
+      return {ok:false,message:'"'+wantedName+'" is a formula function — pick another name.'};
+    if(wantedName!==col.name && allColumns().some(c=>c.name===wantedName))
+      return {ok:false,message:'There is already a column called "'+wantedName+'".'};
+
+    const oldName=col.name;
+    const target=state.dataColumns.find(c=>c.id===id)||state.computedColumns.find(c=>c.id===id);
+    if(!target) return {ok:false,message:'Column not found.'};
+    const snapshot=columnSnapshot();
+    target.name=wantedName;
+    target.unit=wantedUnit;
+    const rewritten=(oldName!==wantedName)?rewriteFormulas(oldName,wantedName):0;
+    recordColumnChange(snapshot);
+    $('dataHead').dataset.sig='\u0000';
+    renderData();
+    refreshAxisPickers();
+    drawGraph();
+    return {ok:true,rewritten,oldName,newName:wantedName};
+  }
+
+  // Wraps any column change so Ctrl+Z can put it back.
+  function columnSnapshot(){
+    return {dataColumns:clone(state.dataColumns),computedColumns:clone(state.computedColumns)};
+  }
+  function recordColumnChange(before){
+    const after=columnSnapshot();
+    if(JSON.stringify(before)!==JSON.stringify(after)){
+      pushAction({type:'columns',before,after});
+    }
+  }
+
+  // Restores a specific column snapshot. The toast cannot just call undo():
+  // clearing the selection after a delete can push its own action, and undo()
+  // would pop that instead - which looked like the button doing nothing.
+  function restoreColumns(snapshot){
+    const before=columnSnapshot();
+    state.dataColumns=clone(snapshot.dataColumns);
+    state.computedColumns=clone(snapshot.computedColumns);
+    pushAction({type:'columns',before,after:columnSnapshot()});
+    $('dataHead').dataset.sig='\u0000';
+    renderData();
+    refreshAxisPickers();
+    autoscaleGraph();
+    toast('Restored');
+  }
+
+  function removeColumn(id){
+    const col=columnById(id);
+    if(!col||col.kind==='video') return false;
+    const name=col.name;
+    // Columns built on this one are not deleted with it - that would throw away
+    // work nobody asked to lose, and it cascades. They stay, visibly broken, and
+    // the toast below offers the way back.
+    const dependents=dependentsOf(name).filter(c=>c.id!==id);
+    const snapshot=columnSnapshot();
+    const before=state.computedColumns.length+state.dataColumns.length;
+    state.computedColumns=state.computedColumns.filter(c=>c.id!==id);
+    state.dataColumns=state.dataColumns.filter(c=>c.id!==id);
+    if(state.computedColumns.length+state.dataColumns.length===before) return false;
+    recordColumnChange(snapshot);
+    // Any computed column whose formula referenced it now yields NaN, which is
+    // visible in the table rather than silent.
+    clearSelection();
+    renderData();
+    refreshAxisPickers();
+    autoscaleGraph();
+    if(dependents.length){
+      const list=dependents.map(c=>'"'+c.name+'"').join(', ');
+      toast('Deleted "'+name+'" — '+list+
+            (dependents.length===1?' no longer calculates':' no longer calculate'),
+            {label:'Undo',run:()=>restoreColumns(snapshot)});
+    }else{
+      toast('Removed column "'+name+'"');
+    }
+    return true;
+  }
+  // Visible × button rather than right-click, which is easy to miss and awkward
+  // on trackpads.
+  // Drag the right edge of a header to set that column's width.
+  (function initColumnResize(){
+    let target=null,startX=0,startWidth=0,grip=null;
+    $('dataHead').addEventListener('mousedown',e=>{
+      const handle=e.target.closest('.col-resize');
+      if(!handle) return;
+      e.preventDefault();
+      e.stopPropagation();
+      target=handle.dataset.resize;
+      grip=handle;
+      grip.classList.add('dragging');
+      const th=handle.closest('th');
+      startX=e.clientX;
+      startWidth=th.getBoundingClientRect().width;
+      document.body.style.cursor='col-resize';
+    },true);
+    document.addEventListener('mousemove',e=>{
+      if(!target) return;
+      const width=Math.max(34,Math.round(startWidth+e.clientX-startX));
+      state.columnWidths[target]=width;
+      const th=$('dataHead').querySelector(`th[data-id="${target}"]`);
+      if(th) th.style.width=width+'px';
+    });
+    document.addEventListener('mouseup',()=>{
+      if(!target) return;
+      if(grip) grip.classList.remove('dragging');
+      target=null;grip=null;
+      document.body.style.cursor='';
+    });
+  })();
+
+  // Acts on mousedown rather than click: the table's own capture-phase click
+  // handling can consume the later event, so the button would silently do
+  // nothing on a real press while working when dispatched in code.
+  $('dataHead').addEventListener('mousedown',e=>{
+    const btn=e.target.closest('.col-remove');
+    if(!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    removeColumn(btn.dataset.remove);
+  },true);
+
+  // Double-click a header to rename it. Accepts "name (unit)".
+  // One place to change everything about a column: name, unit and - for a
+  // computed column - the formula.
+  $('dataHead').addEventListener('dblclick',e=>{
+    const th=e.target.closest('th');
+    if(!th||!th.classList.contains('editable-col')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const col=columnById(th.dataset.id);
+    if(col) openColumnDialog(col.id);
+  });
 
   $('clearSelectionBtn').onclick=()=>{clearSelection();drawGraph();};
 
@@ -2782,6 +4361,13 @@
     // student had touched the graph or fit dropdown. Delete never types into a
     // select, so let it through; arrows still belong to the select.
     if(active && ['INPUT','TEXTAREA'].includes(active.tagName)) return;
+    // Ctrl/Cmd+C over the plot copies it as an image. The data table has its own
+    // copy handler, so only claim the shortcut while the pointer is on the graph.
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'&&(pointerOverGraph||graphFocused)){
+      e.preventDefault();
+      copyGraphToClipboard();
+      return;
+    }
     if(active && active.tagName==='SELECT'){
       if(e.key!=='Delete'&&e.key!=='Backspace') return;
       active.blur();
@@ -2809,6 +4395,12 @@
   new ResizeObserver(resizeOverlay).observe(wrap);
   new ResizeObserver(resizeGraphCanvas).observe(graph.parentElement);
   window.addEventListener('resize',()=>{resizeOverlay();resizeGraphCanvas();});
+  (function initVideoVisibility(){
+    // Always open with the video showing. Hiding it is a per-session choice for
+    // working with pasted data, not a preference worth carrying into the next
+    // lab - a student opening the tool expects to see the video half.
+    applyVideoVisible(true,false);
+  })();
   resizeOverlay();updateLimitLabels();resizeGraphCanvas();
 })();
 </script>
