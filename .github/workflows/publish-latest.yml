@@ -1,0 +1,32 @@
+# Copies the highest-numbered manual_video_analysis_vNN.html to index.html
+# whenever you push a new one, so the site root always serves the newest build
+# and you never have to rename a file.
+name: Publish latest version
+
+on:
+  push:
+    branches: [main]
+    # Only versioned uploads trigger this. Without the filter the workflow's own
+    # commit to index.html would trigger it again, forever.
+    paths:
+      - 'manual_video_analysis_v*.html'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy the newest build to index.html
+        run: |
+          # sort -V is version-aware: plain sorting would pick v9 over v100.
+          latest=$(ls manual_video_analysis_v*.html | sort -V | tail -1)
+          echo "Newest build: $latest"
+          cp "$latest" index.html
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --staged --quiet || git commit -m "Publish $latest"
+          git push
