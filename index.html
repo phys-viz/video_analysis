@@ -329,19 +329,6 @@
   .scale-panel.open{display:grid}
 
   /* Floats over the plot like the scale panel, so it costs the graph no height. */
-  .selection-bar{
-    position:absolute;left:10px;top:10px;z-index:5;
-    display:flex;align-items:center;gap:9px;
-    padding:5px 9px;border-radius:99px;
-    border:1px solid #a16207;background:rgba(63,45,10,.94);
-    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-    font-size:12px;color:#fbbf24;
-  }
-  .selection-bar button{
-    padding:3px 8px;font-size:11px;border-radius:99px;
-    background:#54390c;border-color:#a16207;color:#fde68a;
-  }
-  .selection-bar button:hover{background:#6b4a10;border-color:var(--accent2)}
 
   .fit-field{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
   .fit-field select{padding:5px 6px;font-size:12px}
@@ -676,7 +663,7 @@
     <button id="loadProjectBtn">Open project</button>
     <input id="projectInput" class="hidden" type="file" accept=".mva,application/json">
     <button id="exportCsvBtn">Export CSV</button>
-    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v72</span>
+    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v74</span>
   </div>
 
   <div class="main">
@@ -795,10 +782,6 @@
                 </div>
               </div>
               <div id="fitPanel" class="fit-panel hidden"></div>
-              <div id="selectionBar" class="selection-bar hidden">
-                <span id="selectionCount"></span>
-                <button id="clearSelectionBtn" type="button" title="Also: double-click the plot">Clear selection</button>
-              </div>
               <div id="graphWidthHandle" class="graph-width-handle hidden" title="Drag to set the graph width. Double-click to fill."></div>
               <div class="graph-canvas-wrap">
                 <canvas id="graph" class="graph" width="800" height="500"></canvas>
@@ -1677,6 +1660,13 @@
     state.calCursor=null;
     pruneSelection();
     syncCalibrationInputs();
+    // draw() paints the video overlay and returns immediately when no video is
+    // loaded, so on its own it never refreshed the table or the graph - an undo
+    // in a pasted-data session appeared to do nothing.
+    $('dataHead').dataset.sig='\u0000';
+    renderData();
+    refreshAxisPickers();
+    drawGraph();
     draw();
   }
   function undo(){
@@ -2720,13 +2710,12 @@
     $('fitPanel').classList.add('hidden');
   }
 
-  function updateSelectionBar(){
-    const bar=$('selectionBar');
-    const sel=currentSelection();
-    if(!sel){ bar.classList.add('hidden'); return; }
-    $('selectionCount').textContent=`${sel.length} of ${tableRows().length} rows selected`;
-    bar.classList.remove('hidden');
-  }
+  // The floating "N of M rows selected" pill is gone: it sat over the data and
+  // repeated what the fit readout already says as "n = 6 of 14". A brush is now
+  // shown by the faded points and dimmed rows alone, and cleared by
+  // double-clicking the plot or with Ctrl+Z. Kept as a no-op so the places that
+  // announce a selection change stay in one shape.
+  function updateSelectionBar(){}
 
   function autoLimits(xs,ys){
     const fx=xs.filter(Number.isFinite), fy=ys.filter(Number.isFinite);
@@ -3058,6 +3047,14 @@
     gctx.lineWidth=3.25;
     gctx.lineJoin='round';
     gctx.lineCap='round';
+    // Everything that represents data is confined to the axes box. A fit
+    // extrapolated past the plotted range used to run out over the tick labels
+    // and the axis line, which read as the graph being broken.
+    gctx.save();
+    gctx.beginPath();
+    gctx.rect(m.l,m.t,W-m.l-m.r,H-m.t-m.b);
+    gctx.clip();
+
     const active=flags||xs.map(()=>true);
 
     // Points only - no connecting line. Joining measurements implies a model of
@@ -3159,6 +3156,8 @@
       // Remembered so the pointer code can hit-test it for dragging.
       fitBoxRect={x:bx,y:by,w:boxW+pad*2,h:boxH};
     }
+
+    gctx.restore();
 
     // Expose the mapping so the brush can convert pixels back to data.
     lastPlot={px,py,xmin,xmax,ymin,ymax,m,W,H};
@@ -4533,21 +4532,21 @@
     e:['e','Euler\u2019s number.','e = 2.71828\u2026 so e^2 = 7.389\u2026'],
 
     first:['first(column)','The first value of the column.',
-           'first(t) is the first value in the column named t, and t \u2212 first(t) subtracts it from every value in t \u2014 starting the clock at zero.'],
+           'first(t) is the first value in the column named t, and t \u2212 first(t) subtracts the first value from every value in t \u2014 starting the time at t = 0.'],
     last:['last(column)','The last value of the column.',
           'last(t) is the last value in the column named t, and last(t) \u2212 first(t) is the total time.'],
-    min:['min(column)','The smallest value of the column.',
-         'min(y) is the smallest value in the column named y, and y \u2212 min(y) measures height above the lowest point.'],
-    max:['max(column)','The largest value of the column.',
+    min:['min(column)','The minimum value of the column.',
+         'min(y) is the minimum value in the column named y, and y \u2212 min(y) measures height above the lowest point.'],
+    max:['max(column)','The maximum value of the column.',
          'max(y) is the largest value in the column named y, and y / max(y) scales the tallest value to 1.'],
     mean:['mean(column)','The average value of the column.',
           'mean(x) is the average of the column named x, and x \u2212 mean(x) centers the x-data around its mean.'],
     sum:['sum(column)','The sum of every value in the column.',
          'sum(x) is the sum of all of the values of the column named x.'],
 
-    delta:['delta(column)','The change in the value between consecutive rows of the column. One value per gap, so the last row is blank.',
-           'delta(x) is the change in the values of the column named x, and delta(x)/delta(t) is the average velocity for each interval.'],
-    midpoints:['midpoints(column)','The value halfway between consecutive rows of the column. One value per gap, so the last row is blank.',
+    delta:['delta(column)','The change in the value between consecutive rows of the column.',
+           'delta(x) is the change in the values of the column named x, and delta(x)/delta(t) is the average x-velocity for each interval.'],
+    midpoints:['midpoints(column)','The value halfway between consecutive rows of the column.',
                'midpoints(t) produces a column of the midpoints between consecutive rows of the column named t \u2014 plot delta(x)/delta(t) against it.']
   };
 
@@ -4926,7 +4925,6 @@
     if(col) openColumnDialog(col.id);
   });
 
-  $('clearSelectionBtn').onclick=()=>{clearSelection();drawGraph();};
 
   $('copyDataBtn').onclick=copyDataToClipboard;
   setupTableSelection();
