@@ -19,7 +19,9 @@
     /* Graph canvas */
     --graph-bg:#f8fafc;
     /* Geometry */
-    --r-lg:12px; --r-md:8px; --r-sm:6px;
+    /* Two values only: controls and containers. Four different radii were in use
+     with no rule behind which went where. */
+  --r-lg:12px; --r-md:8px; --r-sm:8px;
   }
 
   /* ---------- base ---------- */
@@ -41,10 +43,22 @@
     transition:background .14s ease,border-color .14s ease;
   }
   button:hover{border-color:#64748b;background:#263244}
+
+  /* Three weights: the committing action is filled, everything else is quiet,
+     and anything that destroys data is red. Previously Cancel and Add column
+     were identical and you had to read them to tell which one committed. */
+  button.primary{
+    background:var(--accent);border-color:var(--accent);color:#06283a;font-weight:600;
+  }
+  button.primary:hover{background:#7dd3fc;border-color:#7dd3fc}
+  button.destructive{
+    background:transparent;border-color:#7f1d1d;color:#fca5a5;
+  }
+  button.destructive:hover{background:#3f1d1d;border-color:#b91c1c;color:#fecaca}
   button:active{transform:translateY(1px)}
   button.active{background:#0c4a6e;border-color:var(--accent)}
-  button.danger{border-color:#7f1d1d}
-  button.danger:hover{border-color:#b91c1c;background:#2a1616}
+  button.danger{background:transparent;border-color:#7f1d1d;color:#fca5a5}
+  button.danger:hover{background:#3f1d1d;border-color:#b91c1c;color:#fecaca}
   input,select{
     background:var(--well);
     color:var(--text);
@@ -185,24 +199,27 @@
     display:grid;grid-template-columns:1fr 1.2fr;gap:8px;
     padding:0 8px 8px;background:var(--well);
   }
-  .tool-card{border:1px solid var(--line);border-radius:var(--r-md);padding:8px 10px;min-width:0}
+  /* These were noticeably airier than the transport row above and the table
+     beside them, which made the page look unbalanced and cost the video height. */
+  .tool-card{border:1px solid var(--line);border-radius:var(--r-md);padding:7px 9px;min-width:0}
   .measurement-card{background:#162033}
   .tracking-card{background:#142033}
   .tool-card h3{
-    margin:0 0 7px;font-size:12px;
+    margin:0 0 5px;font-size:11px;
     text-transform:uppercase;letter-spacing:.08em;
   }
   .measurement-card h3{color:#7dd3fc}
   .tracking-card h3{color:#4ade80}
   .tool-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-  .tool-row + .tool-row{margin-top:7px}
-  .tool-card button{padding:6px 9px;font-size:12px;border-radius:var(--r-sm)}
+  .tool-row + .tool-row{margin-top:5px}
+  .tool-card button{padding:5px 9px;font-size:12px;border-radius:var(--r-sm)}
   .tool-card label{display:flex;align-items:center;gap:5px;white-space:nowrap}
-  .tool-card select{padding:6px}
+  .tool-card select{padding:4px 6px}
+  .tool-card input[type=number],.tool-card input[type=text]{padding:4px 6px}
   .tool-card input[type=number]{width:66px}
   .tool-card input#calLength{width:4.5em;min-width:0}
   .tool-card input#unitInput{width:3.3em;min-width:0}
-  .status{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.3}
+  .status{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.3}
   .cal-accent{color:var(--calcolor);font-weight:600}
   .swatches{display:inline-flex;gap:4px;align-items:center;margin-left:2px}
   .zoom-group{display:inline-flex;margin-left:6px;border-radius:var(--r-sm);overflow:hidden;border:1px solid var(--line)}
@@ -272,10 +289,14 @@
   .splitter-h.collapsed:hover::after{color:var(--text);border-color:var(--accent)}
 
   /* ---------- graph ---------- */
+  /* One line, but allowed to wrap onto a second when the panel is narrow -
+     nowrap alone pushed the axis pickers off the left edge. */
   .graph-toolbar{
     display:flex;align-items:center;justify-content:center;
-    gap:8px;flex-wrap:nowrap;margin-bottom:8px;
+    gap:6px;flex-wrap:wrap;margin-bottom:8px;
   }
+  .graph-toolbar button{white-space:nowrap;padding:5px 9px;font-size:12px}
+  .graph-toolbar select{max-width:120px}
   .graph-toolbar label{display:flex;align-items:center;gap:5px}
   /* The canvas used to be clamped to a fixed height band. It now grows and
      shrinks with the pane so the splitter actually changes the plot size. */
@@ -405,7 +426,7 @@
      when the table is wider than the window. */
   .data-toolbar{
     flex:0 0 auto;
-    display:flex;align-items:center;gap:8px;
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
     padding:6px 8px;background:var(--well);
     border:1px solid var(--line);border-bottom:none;
     border-radius:var(--r-md) var(--r-md) 0 0;
@@ -505,7 +526,10 @@
 
   /* ---------- data mode ---------- */
   .data-toolbar-left{display:flex;gap:7px;margin-right:auto}
-  .data-toolbar-left button{padding:5px 9px;font-size:12px}
+  /* Each button stays on one line so the row is level; the row itself may wrap
+     when the panel is narrow, which is better than clipping a control. */
+  .data-toolbar-left{flex-wrap:wrap}
+  .data-toolbar-left button{padding:5px 9px;font-size:12px;white-space:nowrap}
   /* Light enough to read the table behind it while writing a formula. */
   .col-dialog{
     position:fixed;inset:0;z-index:70;display:grid;place-items:center;
@@ -528,7 +552,15 @@
     border:1px solid var(--line);border-radius:var(--r-sm);
     padding:9px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
   }
-  .col-dialog-card input[type=text]{width:100%;margin-bottom:8px}
+  .col-dialog-card input[type=text]{width:100%}
+  /* A placeholder disappears the moment you type, taking the only clue about
+     which field is which with it. */
+  .field{display:block;margin-bottom:9px}
+  .field-label{
+    display:block;margin-bottom:3px;
+    font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--muted);
+  }
   .col-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
   .col-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
   .col-error{color:#fca5a5;font-size:12px;margin-top:8px;min-height:16px}
@@ -586,7 +618,7 @@
     color:#fbbf24;
   }
   .formula-help .fh-label{
-    display:inline-block;min-width:76px;
+    display:inline-block;min-width:98px;
     color:var(--text);font-weight:600;
     font-family:system-ui,-apple-system,Segoe UI,sans-serif;
   }
@@ -621,7 +653,7 @@
       <div id="pasteError" class="col-error"></div>
       <div class="col-actions">
         <button id="pasteCancelBtn">Cancel</button>
-        <button id="pasteOkBtn">Add columns</button>
+        <button id="pasteOkBtn" class="primary">Add columns</button>
       </div>
     </div>
   </div>
@@ -630,17 +662,19 @@
     <div class="col-dialog-card">
       <h3 id="columnDialogTitle">Add calculated column</h3>
       <div class="col-row">
-        <input id="columnName" type="text" placeholder="name, e.g. t2">
-        <input id="columnUnit" type="text" placeholder="unit, e.g. s^2">
+        <label class="field"><span class="field-label">Name</span>
+          <input id="columnName" type="text" placeholder="t2"></label>
+        <label class="field"><span class="field-label">Unit</span>
+          <input id="columnUnit" type="text" placeholder="s^2"></label>
       </div>
-      <div id="formulaRow"><input id="columnFormula" type="text" placeholder="formula, e.g. t^2"></div>
+      <div id="formulaRow"><label class="field"><span class="field-label">Formula</span>
+        <input id="columnFormula" type="text" placeholder="t^2"></label></div>
       <div id="columnError" class="col-error"></div>
       <div class="formula-help" id="formulaHelp">
         <span class="fh-label">Operators</span> + &minus; * / ^ ( )<br>
-        <span class="fh-label">Functions</span> <span class="fh-keys" data-group="fn"></span><br>
         <span class="fh-label">Constants</span> <span class="fh-keys" data-group="const"></span><br>
-        <span class="fh-label">Whole column</span> <span class="fh-keys" data-group="agg"></span><br>
-        <span class="fh-label">Intervals</span> <span class="fh-keys" data-group="int"></span><br>
+        <span class="fh-label">Math functions</span> <span class="fh-keys" data-group="fn"></span><br>
+        <span class="fh-label">Data functions</span> <span class="fh-keys" data-group="data"></span><br>
         <span class="fh-hint">Hover a keyword for what it does.</span>
       </div>
       <div id="keyPop" class="key-pop hidden"></div>
@@ -648,7 +682,7 @@
         <button id="columnDeleteBtn" class="danger hidden" type="button">Delete column</button>
         <span class="spacer"></span>
         <button id="columnCancelBtn">Cancel</button>
-        <button id="columnOkBtn">Add column</button>
+        <button id="columnOkBtn" class="primary">Add column</button>
       </div>
     </div>
   </div>
@@ -663,7 +697,7 @@
     <button id="loadProjectBtn">Open project</button>
     <input id="projectInput" class="hidden" type="file" accept=".mva,application/json">
     <button id="exportCsvBtn">Export CSV</button>
-    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v74</span>
+    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v75</span>
   </div>
 
   <div class="main">
@@ -4002,7 +4036,10 @@
       if(e.key==='Enter') $('applyScaleBtn').click();
     });
   });
-  $('saveProjectBtn').onclick=saveProject;
+  // A download is easy to miss - the browser may drop it straight into a folder
+  // with no visible sign. These are the two moments a student most wants telling
+  // that something happened.
+  $('saveProjectBtn').onclick=()=>{saveProject();toast('Project saved');};
   $('loadProjectBtn').onclick=()=>$('projectInput').click();
   $('projectInput').onchange=e=>{if(e.target.files[0])loadProject(e.target.files[0])};
   // One delegated handler rather than a listener per row rebuilt on every redraw.
@@ -4553,8 +4590,9 @@
   const KEY_GROUPS={
     fn:['sqrt','abs','exp','ln','log','sin','cos','tan','asin','acos','atan'],
     const:['pi','e'],
-    agg:['first','last','min','max','mean','sum'],
-    int:['delta','midpoints']
+    // One group: what they share - needing a column - matters more to writing a
+    // formula than the difference between them.
+    data:['delta','midpoints','first','last','min','max','mean','sum']
   };
 
   (function initFormulaHelp(){
@@ -4928,7 +4966,7 @@
 
   $('copyDataBtn').onclick=copyDataToClipboard;
   setupTableSelection();
-  $('exportCsvBtn').onclick=exportCSV;
+  $('exportCsvBtn').onclick=()=>{exportCSV();toast('CSV exported');};
   document.addEventListener('keyup',e=>{
     if(e.key==='t'||e.key==='T') setTrackKey(false);
   });
