@@ -140,9 +140,17 @@
   .video-wrap{
     position:relative;background:var(--stage);
     display:grid;place-items:center;
-    flex:1 1 auto;min-height:430px;overflow:hidden;
+    /* A 430px floor plus the toolbar, transport row and tool cards came to about
+       716px. With .app pinned to 100vh and nothing scrolling, anything shorter
+       than that put the tracking controls off-screen with no way to reach them -
+       which is what happens on a 1366x768 laptop once browser chrome is taken
+       off. Shrink instead. */
+    flex:1 1 auto;min-height:220px;overflow:hidden;
   }
-  video{display:block;max-width:100%;max-height:68vh}
+  /* The wrap is a flex child that can shrink, so a percentage max-height has no
+     definite box to resolve against. Cap against the wrap's own height with a
+     CSS variable that the resize code keeps current instead. */
+  video{display:block;max-width:100%;max-height:var(--stage-h,68vh)}
   canvas.overlay{
     position:absolute;inset:0;width:100%;height:100%;
     touch-action:none;pointer-events:auto;z-index:2;
@@ -643,6 +651,14 @@
   }
 
   /* ---------- responsive ---------- */
+  /* Last resort: below this there is no arrangement that fits, so let the page
+     scroll rather than hide controls. */
+  @media(max-height:620px){
+    .app{height:auto;min-height:100vh}
+    .main{align-items:start}
+    .video-wrap{min-height:260px}
+  }
+
   @media(max-width:1100px){
     .under-video-tools{grid-template-columns:1fr}
     .transport-row{flex-wrap:wrap}
@@ -760,7 +776,7 @@
     <input id="projectInput" class="hidden" type="file" accept=".mva,application/json">
     <button id="exportCsvBtn">Export CSV</button>
     <button id="helpBtn" title="How to use this (?)">Help</button>
-    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v78</span>
+    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v79</span>
   </div>
 
   <div class="main">
@@ -1307,6 +1323,10 @@
   }
   function resizeOverlay(){
     const r = wrap.getBoundingClientRect();
+    // The video's max-height is a percentage of a flex box that can shrink, which
+    // CSS cannot resolve - so publish the wrap's real height and cap against that.
+    // Without it a large clip overflowed its panel on a short screen.
+    wrap.style.setProperty('--stage-h', Math.max(80,Math.round(r.height))+'px');
     overlay.width = Math.max(1, Math.round(r.width * devicePixelRatio));
     overlay.height = Math.max(1, Math.round(r.height * devicePixelRatio));
     overlay.style.width = r.width+'px'; overlay.style.height = r.height+'px';
