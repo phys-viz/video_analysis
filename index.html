@@ -555,6 +555,25 @@
   .col-dialog-card input[type=text]{width:100%}
   /* A placeholder disappears the moment you type, taking the only clue about
      which field is which with it. */
+  .help-card{width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 60px);overflow:auto}
+  .help-sec{margin-bottom:13px}
+  .help-sec h4{
+    margin:0 0 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--accent);
+  }
+  .help-sec p{margin:0 0 4px;font-size:13px;line-height:1.5;color:var(--text)}
+  .help-sec b{color:var(--text);font-weight:600}
+  .help-sec code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:12.5px;color:#fbbf24;
+  }
+  kbd{
+    display:inline-block;padding:1px 6px;margin:0 1px;
+    font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:11.5px;font-weight:600;
+    background:var(--well);border:1px solid var(--line);border-bottom-width:2px;
+    border-radius:5px;color:var(--text);
+  }
+
   .field{display:block;margin-bottom:9px}
   .field-label{
     display:block;margin-bottom:3px;
@@ -658,6 +677,49 @@
     </div>
   </div>
 
+  <div id="helpDialog" class="col-dialog hidden">
+    <div class="col-dialog-card help-card">
+      <h3>Quick help</h3>
+
+      <div class="help-sec">
+        <h4>Set up</h4>
+        <p><b>Choose File</b> loads your video.</p>
+        <p><b>Calibrate</b>, then click one end of something whose length you know and then the other. Type that length and its units underneath.</p>
+      </div>
+
+      <div class="help-sec">
+        <h4>Track the motion</h4>
+        <p>Hold <kbd>T</kbd> and click the object. Each click records a point and moves to the next frame.</p>
+        <p>Click a point to select it, then <kbd>Delete</kbd> to remove it. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes anything.</p>
+        <p>The arrow keys step frames. <b>Fit / 1:1 / 2:1</b> zoom the video; drag it to move around when zoomed in.</p>
+      </div>
+
+      <div class="help-sec">
+        <h4>Plot and fit</h4>
+        <p>Choose what to plot with <b>Y</b> and <b>vs X</b>.</p>
+        <p>Drag across the graph to use only part of the data. Double-click the graph to go back to all of it.</p>
+        <p><b>Fit</b> draws a best fit and reports its equation. <kbd>Ctrl</kbd>+<kbd>C</kbd> over the graph copies it as a picture.</p>
+      </div>
+
+      <div class="help-sec">
+        <h4>Make new columns</h4>
+        <p><b>Add calculated column</b> builds a column from the ones you already have. Hover any keyword in that window to see what it does.</p>
+        <p>For velocity: <code>delta(x)/delta(t)</code>, plotted against <code>midpoints(t)</code>.</p>
+      </div>
+
+      <div class="help-sec">
+        <h4>Keep your work</h4>
+        <p><b>Save project</b> stores everything; <b>Open project</b> brings it back, then you pick the same video again.</p>
+        <p><b>Export CSV</b> gives you just the numbers.</p>
+      </div>
+
+      <div class="col-actions">
+        <span class="spacer"></span>
+        <button id="helpCloseBtn" class="primary">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="columnDialog" class="col-dialog hidden">
     <div class="col-dialog-card">
       <h3 id="columnDialogTitle">Add calculated column</h3>
@@ -697,7 +759,8 @@
     <button id="loadProjectBtn">Open project</button>
     <input id="projectInput" class="hidden" type="file" accept=".mva,application/json">
     <button id="exportCsvBtn">Export CSV</button>
-    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v76</span>
+    <button id="helpBtn" title="How to use this (?)">Help</button>
+    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v78</span>
   </div>
 
   <div class="main">
@@ -925,6 +988,8 @@
   let graphPercent=DEFAULT_VSPLIT;
   // Once the student drags the handle, stop imposing a default on them.
   let outputSplitTouched=false;
+  // True when localStorage already holds a split the student chose earlier.
+  let outputSplitSaved=false;
   function setGraphSplitPercent(percent){
     graphCollapsed=false;
     graphPercent=clamp(percent,4,96);
@@ -971,8 +1036,12 @@
     try{
       const raw=localStorage.getItem(VSPLIT_KEY);
       const stored=raw===null?NaN:Number(raw);
-      if(Number.isFinite(stored)&&stored>0)graphPercent=clamp(stored,4,96);
+      if(Number.isFinite(stored)&&stored>0){
+        graphPercent=clamp(stored,4,96);
+        outputSplitSaved=true;      // a real preference, not a default to overwrite
+      }
       graphCollapsed=localStorage.getItem(VCOLLAPSE_KEY)==='1';
+      if(graphCollapsed) outputSplitSaved=true;
     }catch{}
     renderOutputSplit();
     let dragging=false;
@@ -4254,7 +4323,10 @@
   $('fitSelect').onchange=e=>{
     e.target.blur();
     state.fitModels[plotKey()]=e.target.value;
-    autoscaleGraph();
+    // Choosing a fit used to call autoscaleGraph(), which silently replaced
+    // limits the student had typed in Manual scale. A fit changes what is drawn
+    // on the axes, not what the axes are.
+    if(state.graphLimitsManual) drawGraph(); else autoscaleGraph();
   };
 
   // Dialogs can be dragged by their title, so a formula can be written while
@@ -4357,7 +4429,10 @@
     $('toggleVideoBtn').textContent=visible?'Hide video':'Show video';
     applyGraphWidth(visible?100:state.graphWidth,false);
     if(remember){ try{localStorage.setItem(VIDEO_KEY,visible?'1':'0');}catch{} }
-    if(!outputSplitTouched) setGraphSplitPercent(visible?DEFAULT_VSPLIT:50);
+    // Only impose a default when the student has no saved preference. This ran
+    // on every load with outputSplitTouched reset to false, so a dragged
+    // splitter was written to localStorage and then immediately overridden.
+    if(!outputSplitTouched && !outputSplitSaved) setGraphSplitPercent(visible?DEFAULT_VSPLIT:50);
     refreshAxisPickers();
     $('fitSelect').value=currentFitModel();
     renderData();
@@ -4632,6 +4707,20 @@
     document.addEventListener('focusin',hide);
     $('columnDialog').addEventListener('pointerleave',hide);
   })();
+
+  $('helpBtn').onclick=()=>openDialog('helpDialog');
+  $('helpCloseBtn').onclick=()=>$('helpDialog').classList.add('hidden');
+  // Escape closes it, like the other panels.
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&!$('helpDialog').classList.contains('hidden')){
+      e.preventDefault();
+      $('helpDialog').classList.add('hidden');
+    }
+  });
+  // Clicking the dimmed area outside the card closes it too.
+  $('helpDialog').addEventListener('pointerdown',e=>{
+    if(e.target===$('helpDialog')) $('helpDialog').classList.add('hidden');
+  });
 
   $('addColumnBtn').onclick=()=>openColumnDialog(null);
   $('columnCancelBtn').onclick=()=>{
