@@ -776,7 +776,7 @@
     <input id="projectInput" class="hidden" type="file" accept=".mva,application/json">
     <button id="exportCsvBtn">Export CSV</button>
     <button id="helpBtn" title="How to use this (?)">Help</button>
-    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v81</span>
+    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v82</span>
   </div>
 
   <div class="main">
@@ -2184,8 +2184,8 @@
   const IDENT_PART=new RegExp('[A-Za-z0-9_'+SUPERSCRIPTS+SUBSCRIPTS+GREEK+']');
 
   // Typing t^2 or x_0 produces t² and x₀, so students get real characters
-  // without hunting for a character map. Multi-character numeric scripts are
-  // handled too: x^10 -> x¹⁰, x^-2 -> x⁻², v_12 -> v₁₂.
+  // without hunting for a character map. Numeric scripts may contain more than
+  // one character: x^10 -> x¹⁰, x^-2 -> x⁻², v_12 -> v₁₂.
   const SUP_MAP={'0':'\u2070','1':'\u00B9','2':'\u00B2','3':'\u00B3','4':'\u2074','5':'\u2075','6':'\u2076','7':'\u2077','8':'\u2078','9':'\u2079','+':'\u207A','-':'\u207B','n':'\u207F'};
   const SUB_MAP={'0':'\u2080','1':'\u2081','2':'\u2082','3':'\u2083','4':'\u2084','5':'\u2085','6':'\u2086','7':'\u2087','8':'\u2088','9':'\u2089','+':'\u208A','-':'\u208B'};
   const scriptChars=(text,map)=>[...text].map(ch=>map[ch]||ch).join('');
