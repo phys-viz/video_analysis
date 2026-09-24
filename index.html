@@ -776,7 +776,7 @@
     <input id="projectInput" class="hidden" type="file" accept=".mva,application/json">
     <button id="exportCsvBtn">Export CSV</button>
     <button id="helpBtn" title="How to use this (?)">Help</button>
-    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v82</span>
+    <span class="build-tag" title="Build version. Check this matches the file you meant to open.">v83</span>
   </div>
 
   <div class="main">
@@ -2960,7 +2960,12 @@
     const xs=rows.map(r=>r[colX.name]);
     const ys=rows.map(r=>r[colY.name]);
     const xlab=columnLabel(colX), ylab=columnLabel(colY);
-    const title=`${colY.name} vs ${colX.name}`;
+    // Use the friendly display labels in the graph title too. The axis labels
+    // already did this, but the title was still using the formula-safe internal
+    // names, so t^2/2 could appear there as t²_2.
+    const xTitle=applyScriptShorthand(colX.label||colX.name);
+    const yTitle=applyScriptShorthand(colY.label||colY.name);
+    const title=`${yTitle} vs ${xTitle}`;
     const color=SERIES_COLORS[colY.name]||(colY.kind==='computed'?'#c084fc':'#38bdf8');
     const pointColor=color;
 
